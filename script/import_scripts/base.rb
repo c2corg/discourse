@@ -696,8 +696,7 @@ class ImportScripts::Base
     @start_times.fetch(key) {|k| @start_times[k] = Time.now}
   end
 
-  def batches(batch_size)
-    offset = 0
+  def batches(batch_size, offset=0)
     loop do
       yield offset
       offset += batch_size

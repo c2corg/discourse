@@ -34,6 +34,7 @@ else
   gem 'seed-fu', '~> 2.3.5'
 end
 
+gem 'ruby-bbcode-to-md', :path => "/home/gberaudo/dev/ruby-bbcode-to-md/"
 gem 'mail'
 gem 'mime-types', require: 'mime/types/columnar'
 

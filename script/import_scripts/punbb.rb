@@ -1,22 +1,24 @@
-require "mysql2"
+require "pg"
 
 require File.expand_path(File.dirname(__FILE__) + "/base.rb")
+
+require 'pry'
 
 # Call it like this:
 #   RAILS_ENV=production bundle exec ruby script/import_scripts/punbb.rb
 class ImportScripts::PunBB < ImportScripts::Base
 
-  PUNBB_DB = "punbb_db"
-  BATCH_SIZE = 1000
+  PUNBB_DB = "c2corg"
+  BATCH_SIZE = 500
 
   def initialize
     super
 
-    @client = Mysql2::Client.new(
-      host: "localhost",
-      username: "root",
-      password: "pa$$word",
-      database: PUNBB_DB
+    @client = PG::Connection.open(
+      :host => "localhost",
+      :user => "www-data",
+      :password => "www-data",
+      :dbname => PUNBB_DB
     )
   end
 
@@ -27,34 +29,48 @@ class ImportScripts::PunBB < ImportScripts::Base
     suspend_users
   end
 
+  def normalize_login_name name
+    # Discourse has very strict username rules
+    # https://meta.discourse.org/t/what-are-the-rules-for-usernames/13458
+    name.strip!
+    name.gsub!(/[^0-9a-z]/i, '_')
+    name.squeeze!('_')
+    name.slice! 15..-1 if name.size > 15
+    last_char = name[-1, 1]
+    name.slice!(-1) if last_char == '_'
+  end
+
   def import_users
     puts '', "creating users"
 
-    total_count = mysql_query("SELECT count(*) count FROM users;").first['count']
+    total_count = sql_query("SELECT count(*) count FROM users;").first['count']
 
     batches(BATCH_SIZE) do |offset|
-      results = mysql_query(
-        "SELECT id, username, realname name, url website, email email, registered created_at,
-                registration_ip registration_ip_address, last_visit last_visit_time, last_email_sent last_emailed_at,
-                last_email_sent last_emailed_at, location, group_id
-         FROM users
+      results = sql_query(
+        "SELECT id, login_name, username, url website, email, registered,
+                registration_ip, last_visit,
+                location, group_id
+         FROM app_users_private_data
+         ORDER BY id ASC
          LIMIT #{BATCH_SIZE}
          OFFSET #{offset};")
 
-      break if results.size < 1
+      break if results.ntuples < 1
 
-      next if all_records_exist? :users, users.map {|u| u["id"].to_i}
+      next if all_records_exist? :users, results.map {|u| u["id"].to_i}
 
       create_users(results, total: total_count, offset: offset) do |user|
+        # puts '', user, ''
+        normalize_login_name(user['login_name'])
         { id: user['id'],
           email: user['email'],
-          username: user['username'],
-          name: user['name'],
-          created_at: Time.zone.at(user['created_at']),
-          website: user['website'],
-          registration_ip_address: user['registration_ip_address'],
-          last_seen_at: Time.zone.at(user['last_visit_time']),
-          last_emailed_at: user['last_emailed_at'] == nil ? 0 : Time.zone.at(user['last_emailed_at']),
+          username: user['login_name'], # login name
+          name: user['username'], # full name
+          created_at: 0,
+          website: user['url'],
+          registration_ip_address: user['registered'],
+          last_seen_at: Time.zone.at(user['last_visit'].to_i),
+          last_emailed_at: 0,
           location: user['location'],
           moderator: user['group_id'] == 4,
           admin: user['group_id'] == 1 }
@@ -65,32 +81,32 @@ class ImportScripts::PunBB < ImportScripts::Base
   def import_categories
     puts "", "importing top level categories..."
 
-    categories = mysql_query("
-                              SELECT id, cat_name name, disp_position position
-                              FROM categories
-                              ORDER BY id ASC
-                            ").to_a
+    categories = sql_query(
+      "SELECT id, cat_name, disp_position
+       FROM punbb_categories
+       ORDER BY id ASC").to_a
 
     create_categories(categories) do |category|
+      puts category
       {
         id: category["id"],
-        name: category["name"]
+        name: category["cat_name"]
       }
     end
 
     puts "", "importing children categories..."
 
-    children_categories = mysql_query("
-                                       SELECT id, forum_name name, forum_desc description, disp_position position, cat_id parent_category_id
-                                       FROM forums
-                                       ORDER BY id
-                                      ").to_a
+    children_categories = sql_query(
+      "SELECT id, forum_name, forum_desc, disp_position, cat_id parent_category_id
+       FROM punbb_forums
+       ORDER BY id").to_a
 
     create_categories(children_categories) do |category|
+      puts 'subcategory', category
       {
         id: "child##{category['id']}",
-        name: category["name"],
-        description: category["description"],
+        name: category["forum_name"],
+        description: category["forum_desc"],
         parent_category_id: category_id_from_imported_category_id(category["parent_category_id"])
       }
     end
@@ -99,28 +115,36 @@ class ImportScripts::PunBB < ImportScripts::Base
   def import_posts
     puts "", "creating topics and posts"
 
-    total_count = mysql_query("SELECT count(*) count from posts").first["count"]
+    total_count = sql_query("SELECT count(*) count from punbb_posts").first["count"]
 
-    batches(BATCH_SIZE) do |offset|
-      results = mysql_query("
+    # In our old version we do not have t.first_post_id first_post_id,
+    # ALTER TABLE punbb_topics ADD COLUMN first_post_id integer default 0;
+    # UPDATE punbb_topics SET first_post_id = (select MIN(p.id) from punbb_posts as p where punbb_topics.id = p.topic_id);
+    # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
+    batches(BATCH_SIZE, total_count.to_i * 95 / 100) do |offset|
+      results = sql_query("
+        SELECT id FROM punbb_posts ORDER BY posted
+        LIMIT #{BATCH_SIZE} OFFSET #{offset};
+      ").to_a
+
+      break if results.size < 1
+      next if all_records_exist? :posts, results.map {|u| u["id"].to_i}
+
+      results = sql_query("
         SELECT p.id id,
                t.id topic_id,
                t.forum_id category_id,
                t.subject title,
-               t.first_post_id first_post_id,
+               t.first_post_id,
                p.poster_id user_id,
                p.message raw,
                p.posted created_at
-        FROM posts p,
-             topics t
+        FROM punbb_posts p,
+             punbb_topics t
         WHERE p.topic_id = t.id
         ORDER BY p.posted
-        LIMIT #{BATCH_SIZE}
-        OFFSET #{offset};
+        LIMIT #{BATCH_SIZE} OFFSET #{offset};
       ").to_a
-
-      break if results.size < 1
-      next if all_records_exist? :posts, results.map {|m| m['id'].to_i}
 
       create_posts(results, total: total_count, offset: offset) do |m|
         skip = false
@@ -129,7 +153,7 @@ class ImportScripts::PunBB < ImportScripts::Base
         mapped[:id] = m['id']
         mapped[:user_id] = user_id_from_imported_user_id(m['user_id']) || -1
         mapped[:raw] = process_punbb_post(m['raw'], m['id'])
-        mapped[:created_at] = Time.zone.at(m['created_at'])
+        mapped[:created_at] = Time.zone.at(m['created_at'].to_i)
 
         if m['id'] == m['first_post_id']
           mapped[:category] = category_id_from_imported_category_id("child##{m['category_id']}")
@@ -154,11 +178,11 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     banned = 0
     failed = 0
-    total = mysql_query("SELECT count(*) count FROM bans").first['count']
+    total = sql_query("SELECT count(*) count FROM punbb_bans").first['count']
 
     system_user = Discourse.system_user
 
-    mysql_query("SELECT username, email FROM bans").each do |b|
+    sql_query("SELECT username, email FROM punbb_bans").each do |b|
       user = User.find_by_email(b['email'])
       if user
         user.suspended_at = Time.now
@@ -208,9 +232,11 @@ class ImportScripts::PunBB < ImportScripts::Base
     s
   end
 
-  def mysql_query(sql)
-    @client.query(sql, cache_rows: false)
+  def sql_query(sql)
+    @client.exec(sql)
   end
 end
 
-ImportScripts::PunBB.new.perform
+if __FILE__ == $0
+  ImportScripts::PunBB.new.perform
+end
