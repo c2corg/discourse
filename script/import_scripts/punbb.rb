@@ -132,6 +132,7 @@ class ImportScripts::PunBB < ImportScripts::Base
 
       results = sql_query("
         SELECT p.id id,
+               p.poster poster,
                t.id topic_id,
                t.forum_id category_id,
                t.subject title,
@@ -153,6 +154,11 @@ class ImportScripts::PunBB < ImportScripts::Base
         mapped[:id] = m['id']
         mapped[:user_id] = user_id_from_imported_user_id(m['user_id']) || -1
         mapped[:raw] = process_punbb_post(m['raw'], m['id'])
+        if mapped[:user_id] == -1
+          ## Prepend the poster name when the poster was anonymous.
+          mapped[:raw] = "Posted as guest by #{m['poster']}\n#{mapped[:raw]}"
+        end
+
         mapped[:created_at] = Time.zone.at(m['created_at'].to_i)
 
         if m['id'] == m['first_post_id']
