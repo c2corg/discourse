@@ -109,6 +109,10 @@ class ImportScripts::Base
     @lookup.post_id_from_imported_post_id(import_id)
   end
 
+  def post_content_from_discourse_post_id(post_id)
+    @lookup.post_content_from_discourse_post_id(post_id)
+  end
+
   def topic_lookup_from_imported_post_id(import_id)
     @lookup.topic_lookup_from_imported_post_id(import_id)
   end
