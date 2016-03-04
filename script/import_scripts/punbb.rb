@@ -47,7 +47,7 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     batches(BATCH_SIZE) do |offset|
       results = sql_query(
-        "SELECT id, login_name, username, url website, email, registered,
+        "SELECT id, login_name, topo_name, url website, email, registered,
                 registration_ip, last_visit,
                 location, group_id
          FROM app_users_private_data
@@ -65,7 +65,7 @@ class ImportScripts::PunBB < ImportScripts::Base
         { id: user['id'],
           email: user['email'],
           username: user['login_name'], # login name
-          name: user['username'], # full name
+          name: user['topo_name'], # full name
           created_at: 0,
           website: user['url'],
           registration_ip_address: user['registered'],
