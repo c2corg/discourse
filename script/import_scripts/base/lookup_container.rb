@@ -25,6 +25,16 @@ module ImportScripts
         @posts[import_id] = post_id
       end
 
+      puts 'loading existing posts2...'
+      @posts2 = {}
+      Post.pluck(:id, :user_id, :topic_id, :post_number).each do |id, user_id, topic_id, post_number|
+        @posts2[id] = {
+          user_id: user_id,
+          topic_id: topic_id,
+          post_number: post_number
+        }
+      end
+
       puts 'loading existing topics...'
       @topics = {}
       Post.joins(:topic).pluck('posts.id, posts.topic_id, posts.post_number, topics.slug').each do |p|
@@ -39,6 +49,11 @@ module ImportScripts
     # Get the Discourse Post id based on the id of the source record
     def post_id_from_imported_post_id(import_id)
       @posts[import_id] || @posts[import_id.to_s]
+    end
+
+    # Get some Discourse Post info based on the Discourse Post id
+    def post_content_from_discourse_post_id(import_id)
+      @posts2[import_id] || @posts2[import_id.to_s]
     end
 
     # Get the Discourse topic info (a hash) based on the id of the source record
@@ -86,6 +101,11 @@ module ImportScripts
 
     def add_post(import_id, post)
       @posts[import_id] = post.id
+      @posts2[post.id] = {
+        user_id: post.user_id,
+        topic_id: post.topic_id,
+        post_number: post.post_number
+      }
     end
 
     def add_topic(post)
