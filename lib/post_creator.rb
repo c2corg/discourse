@@ -330,6 +330,10 @@ class PostCreator
     post.extract_quoted_post_numbers
     post.created_at = Time.zone.parse(@opts[:created_at].to_s) if @opts[:created_at].present?
 
+    if id = @opts[:forced_id]
+      post.id = id
+    end
+
     if fields = @opts[:custom_fields]
       post.custom_fields = fields
     end
