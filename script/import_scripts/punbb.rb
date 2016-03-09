@@ -72,7 +72,7 @@ class ImportScripts::PunBB < ImportScripts::Base
           last_seen_at: Time.zone.at(user['last_visit'].to_i),
           last_emailed_at: 0,
           location: user['location'],
-          moderator: user['group_id'] == 4,
+          moderator: user['group_id'] == 2,
           admin: user['group_id'] == 1 }
       end
     end
