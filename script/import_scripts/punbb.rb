@@ -156,7 +156,7 @@ class ImportScripts::PunBB < ImportScripts::Base
         mapped[:raw] = process_punbb_post(m['raw'], m['id'])
         if mapped[:user_id] == -1
           ## Prepend the poster name when the poster was anonymous.
-          mapped[:raw] = "Posted as guest by _#{m['poster']}_:\n#{mapped[:raw]}"
+          mapped[:raw] = "Posted as guest by _#{m['poster']}_:\n\n#{mapped[:raw]}"
         end
 
         mapped[:created_at] = Time.zone.at(m['created_at'].to_i)
