@@ -180,6 +180,9 @@ class ImportScripts::PunBB < ImportScripts::Base
         skip ? nil : mapped
       end
     end
+
+    puts '', "updating posts sequence value"
+    Post.exec_sql("select setval('posts_id_seq', (select max(id) + 1 from posts), false);")
   end
 
   def suspend_users
