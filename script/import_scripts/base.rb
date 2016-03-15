@@ -402,6 +402,8 @@ class ImportScripts::Base
       name: opts[:name],
       user_id: opts[:user_id] || opts[:user].try(:id) || Discourse::SYSTEM_USER_ID,
       position: opts[:position],
+      read_restricted: opts[:read_restricted],
+      suppress_from_homepage: opts[:suppress_from_homepage],
       description: opts[:description],
       parent_category_id: opts[:parent_category_id],
       color: opts[:color] || "AB9364",
