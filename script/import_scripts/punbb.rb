@@ -10,6 +10,13 @@ class ImportScripts::PunBB < ImportScripts::Base
 
   PUNBB_DB = "c2corg"
   BATCH_SIZE = 500
+  GROUPS_ASSOCE = [5, 8, 9, 13, 26]
+  GROUPS_ANCIENS = [10]
+  GROUPS_CA = [6, 15, 21]
+
+  VIRTUAL_GROUP_ASSOCE_ID = 1
+  VIRTUAL_GROUP_ANCIENTS_ID = 2
+  VIRTUAL_GROUP_CA_ID = 3
 
   def initialize
     super
@@ -23,10 +30,24 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def execute
+    import_groups
     import_users
     import_categories
     import_posts
     suspend_users
+  end
+
+  def import_groups
+    puts '', "creating groups"
+
+    groups = [
+    {id: VIRTUAL_GROUP_ASSOCE_ID, name: "Adhérents Association"},
+    {id: VIRTUAL_GROUP_ANCIENTS_ID, name: "Anciens membre"},
+    {id: VIRTUAL_GROUP_CA_ID, name: "CA"}
+    ]
+    create_groups(groups) do |group|
+      group
+    end
   end
 
   def normalize_login_name name
@@ -60,6 +81,7 @@ class ImportScripts::PunBB < ImportScripts::Base
       next if all_records_exist? :users, results.map {|u| u["id"].to_i}
 
       create_users(results, total: total_count, offset: offset) do |user|
+        gid = user['group_id'].to_i
         # puts '', user, ''
         normalize_login_name(user['login_name'])
         { id: user['id'],
@@ -73,9 +95,29 @@ class ImportScripts::PunBB < ImportScripts::Base
           last_emailed_at: 0,
           location: user['location'],
           moderator: user['group_id'] == 2,
-          admin: user['group_id'] == 1 }
+          admin: user['group_id'] == 1,
+          post_create_action: proc do |newuser|
+              if GROUPS_ASSOCE.include? gid
+                group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_ASSOCE_ID)
+                GroupUser.find_or_create_by(user: newuser, group_id: group_id)
+              end
+              if GROUPS_ANCIENS.include? gid
+                group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_ANCIENTS_ID)
+                GroupUser.find_or_create_by(user: newuser, group_id: group_id)
+              end
+              if GROUPS_CA.include? gid
+                group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_CA_ID)
+                GroupUser.find_or_create_by(user: newuser, group_id: group_id)
+              end
+          end
+        }
       end
     end
+  end
+
+
+  def is_restricted_category(name)
+     restricted = name.include?("C2C V6") || name.include?("Site et Association") || name.include?("Administration des Sites") || name.include?("Sito e Associazione") || name.include?("Amministrazioni del sito") || name.include?("Modos") || name.include?("Développement")
   end
 
   def import_categories
@@ -88,9 +130,16 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     create_categories(categories) do |category|
       puts category
+      restricted = is_restricted_category(category["cat_name"])
+      suppress_from_homepage = category["id"] == '1' # commentaires topoguide
+      if suppress_from_homepage
+        binding.pry
+      end
       {
         id: category["id"],
-        name: category["cat_name"]
+        name: category["cat_name"],
+        read_restricted: restricted,
+        suppress_from_homepage: suppress_from_homepage
       }
     end
 
@@ -103,12 +152,25 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     create_categories(children_categories) do |category|
       puts 'subcategory', category
+      restricted = is_restricted_category(category["forum_name"])
       {
         id: "child##{category['id']}",
         name: category["forum_name"],
+        read_restricted: restricted,
+        suppress_from_homepage: false,
         description: category["forum_desc"],
         parent_category_id: category_id_from_imported_category_id(category["parent_category_id"])
       }
+    end
+
+
+    puts "Protecting known categories"
+    group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_CA_ID)
+    Category.find_by(:read_restricted == true) do |category|
+      puts "protecting category", category.name
+      CategoryGroup.find_or_create_by(category_id: category.id, group_id: group_id) do |cg|
+        cg.permission_type = CategoryGroup.permission_types[:full]
+      end
     end
   end
 
