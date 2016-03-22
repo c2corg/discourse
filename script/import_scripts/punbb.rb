@@ -10,13 +10,19 @@ class ImportScripts::PunBB < ImportScripts::Base
 
   PUNBB_DB = "c2corg"
   BATCH_SIZE = 500
-  GROUPS_ASSOCE = [5, 8, 9, 13, 26]
+  GROUPS_ASSOCE = [5, 8, 13, 15, 26]
   GROUPS_ANCIENS = [10]
   GROUPS_CA = [6, 15, 21]
+  GROUPS_MODOS_TOPO = [11, 13, 15, 16, 26]
+  GROUPS_PUB = [22, 26]
+  GROUPS_PARTNERS = [27]
 
   VIRTUAL_GROUP_ASSOCE_ID = 1
   VIRTUAL_GROUP_ANCIENTS_ID = 2
   VIRTUAL_GROUP_CA_ID = 3
+  VIRTUAL_GROUP_MODOS_TOPO_ID = 4
+  VIRTUAL_GROUP_PUB_ID = 5
+  VIRTUAL_GROUPS_PARTNERS_ID = 6
 
   def initialize
     super
@@ -41,9 +47,12 @@ class ImportScripts::PunBB < ImportScripts::Base
     puts '', "creating groups"
 
     groups = [
-    {id: VIRTUAL_GROUP_ASSOCE_ID, name: "Adhérents Association"},
-    {id: VIRTUAL_GROUP_ANCIENTS_ID, name: "Anciens membre"},
-    {id: VIRTUAL_GROUP_CA_ID, name: "CA"}
+    {id: VIRTUAL_GROUP_ASSOCE_ID, name: "Association"},
+    {id: VIRTUAL_GROUP_ANCIENTS_ID, name: "Ancien_membre"},
+    {id: VIRTUAL_GROUP_CA_ID, name: "CA"},
+    {id: VIRTUAL_GROUP_MODOS_TOPO_ID, name: "Modo_Topoguide"},
+    {id: VIRTUAL_GROUP_PUB_ID, name: "Pub"},
+    {id: VIRTUAL_GROUPS_PARTNERS_ID, name: "Partenaires"}
     ]
     create_groups(groups) do |group|
       group
@@ -82,6 +91,7 @@ class ImportScripts::PunBB < ImportScripts::Base
 
       create_users(results, total: total_count, offset: offset) do |user|
         gid = user['group_id'].to_i
+        is_staff = (user['group_id'] == 1 || user['group_id'] == 2)
         # puts '', user, ''
         normalize_login_name(user['login_name'])
         { id: user['id'],
@@ -97,7 +107,7 @@ class ImportScripts::PunBB < ImportScripts::Base
           moderator: user['group_id'] == 2,
           admin: user['group_id'] == 1,
           post_create_action: proc do |newuser|
-              if GROUPS_ASSOCE.include? gid
+              if (GROUPS_ASSOCE.include? gid) || is_staff
                 group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_ASSOCE_ID)
                 GroupUser.find_or_create_by(user: newuser, group_id: group_id)
               end
@@ -107,6 +117,18 @@ class ImportScripts::PunBB < ImportScripts::Base
               end
               if GROUPS_CA.include? gid
                 group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_CA_ID)
+                GroupUser.find_or_create_by(user: newuser, group_id: group_id)
+              end
+              if GROUPS_MODOS_TOPO.include? gid
+                group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_MODOS_TOPO_ID)
+                GroupUser.find_or_create_by(user: newuser, group_id: group_id)
+              end
+              if GROUPS_PUB.include? gid
+                group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_PUB_ID)
+                GroupUser.find_or_create_by(user: newuser, group_id: group_id)
+              end
+              if GROUPS_PARTNERS.include? gid
+                group_id = group_id_from_imported_group_id(VIRTUAL_GROUPS_PARTNERS_ID)
                 GroupUser.find_or_create_by(user: newuser, group_id: group_id)
               end
           end
