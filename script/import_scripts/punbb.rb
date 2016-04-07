@@ -6,6 +6,8 @@ require 'pry'
 
 # Call it like this:
 #   RAILS_ENV=production bundle exec ruby script/import_scripts/punbb.rb
+#   check usernames where imported correctly:
+#   select u.username, cf.value from users as u, user_custom_fields as cf where u.id = cf.user_id and cf.name = 'import_username' and u.username != cf.value;
 class ImportScripts::PunBB < ImportScripts::Base
 
   PUNBB_DB = "c2corg"
@@ -59,17 +61,6 @@ class ImportScripts::PunBB < ImportScripts::Base
     end
   end
 
-  def normalize_login_name name
-    # Discourse has very strict username rules
-    # https://meta.discourse.org/t/what-are-the-rules-for-usernames/13458
-    name.strip!
-    name.gsub!(/[^0-9a-z]/i, '_')
-    name.squeeze!('_')
-    name.slice! 15..-1 if name.size > 15
-    last_char = name[-1, 1]
-    name.slice!(-1) if last_char == '_'
-  end
-
   def import_users
     puts '', "creating users"
 
@@ -77,7 +68,7 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     batches(BATCH_SIZE) do |offset|
       results = sql_query(
-        "SELECT id, login_name, topo_name, url website, email, registered,
+        "SELECT id, username as forum_username, topo_name, url website, email, registered,
                 registration_ip, last_visit,
                 location, group_id
          FROM app_users_private_data
@@ -93,10 +84,10 @@ class ImportScripts::PunBB < ImportScripts::Base
         gid = user['group_id'].to_i
         is_staff = (user['group_id'] == 1 || user['group_id'] == 2)
         # puts '', user, ''
-        normalize_login_name(user['login_name'])
+        # assuming the login_name is normalized for Discourse
         { id: user['id'],
           email: user['email'],
-          username: user['login_name'], # login name
+          username: user['forum_username'], # forum name
           name: user['topo_name'], # full name
           created_at: 0,
           website: user['url'],
@@ -154,9 +145,6 @@ class ImportScripts::PunBB < ImportScripts::Base
       puts category
       restricted = is_restricted_category(category["cat_name"])
       suppress_from_homepage = category["id"] == '1' # commentaires topoguide
-      if suppress_from_homepage
-        binding.pry
-      end
       {
         id: category["id"],
         name: category["cat_name"],
@@ -205,7 +193,7 @@ class ImportScripts::PunBB < ImportScripts::Base
     # ALTER TABLE punbb_topics ADD COLUMN first_post_id integer default 0;
     # UPDATE punbb_topics SET first_post_id = (select MIN(p.id) from punbb_posts as p where punbb_topics.id = p.topic_id);
     # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
-    batches(BATCH_SIZE, total_count.to_i * 99.8 / 100) do |offset|
+    batches(BATCH_SIZE, total_count.to_i * 99.9 / 100) do |offset|
       results = sql_query("
         SELECT id FROM punbb_posts ORDER BY posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};
