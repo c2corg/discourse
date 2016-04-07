@@ -145,9 +145,6 @@ class ImportScripts::PunBB < ImportScripts::Base
       puts category
       restricted = is_restricted_category(category["cat_name"])
       suppress_from_homepage = category["id"] == '1' # commentaires topoguide
-      if suppress_from_homepage
-        binding.pry
-      end
       {
         id: category["id"],
         name: category["cat_name"],
@@ -196,7 +193,7 @@ class ImportScripts::PunBB < ImportScripts::Base
     # ALTER TABLE punbb_topics ADD COLUMN first_post_id integer default 0;
     # UPDATE punbb_topics SET first_post_id = (select MIN(p.id) from punbb_posts as p where punbb_topics.id = p.topic_id);
     # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
-    batches(BATCH_SIZE, total_count.to_i * 99.8 / 100) do |offset|
+    batches(BATCH_SIZE, total_count.to_i * 99.9 / 100) do |offset|
       results = sql_query("
         SELECT id FROM punbb_posts ORDER BY posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};
