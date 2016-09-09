@@ -128,56 +128,94 @@ class ImportScripts::PunBB < ImportScripts::Base
     end
   end
 
-
-  def is_restricted_category(name)
-     restricted = name.include?("C2C V6") || name.include?("Site et Association") || name.include?("Administration des Sites") || name.include?("Sito e Associazione") || name.include?("Amministrazioni del sito") || name.include?("Modos") || name.include?("Développement")
-  end
-
   def import_categories
     puts "", "importing top level categories..."
 
-    categories = sql_query(
-      "SELECT id, cat_name, disp_position
-       FROM punbb_categories
-       ORDER BY id ASC").to_a
+    restricted_categories = [
+      6,  # Site et Association
+      7,  # Administration des Sites
+      12, # Sito e Associazione
+      13, # Amministrazioni del sito
+      23, # C2C V6
+    ]
+
+    categories = sql_query("
+      SELECT
+        id,
+        cat_name,
+        disp_position
+      FROM punbb_categories
+      ORDER BY id ASC").to_a
 
     create_categories(categories) do |category|
-      puts category
-      restricted = is_restricted_category(category["cat_name"])
+
+      read_restricted = restricted_categories.include? category["id"].to_i
       suppress_from_homepage = category["id"] == '1' # commentaires topoguide
+
       {
         id: category["id"],
         name: category["cat_name"],
-        read_restricted: restricted,
+        read_restricted: read_restricted,
         suppress_from_homepage: suppress_from_homepage
       }
     end
 
     puts "", "importing children categories..."
 
-    children_categories = sql_query(
-      "SELECT id, forum_name, forum_desc, disp_position, cat_id parent_category_id
-       FROM punbb_forums
-       ORDER BY id").to_a
+    restricted_forums = [
+      3,  # Modos Ecotourisme
+      36, # Modos Forum
+      37, # Modos Topoguide
+      40, # Développement
+    ]
 
-    create_categories(children_categories) do |category|
-      puts 'subcategory', category
-      restricted = is_restricted_category(category["forum_name"])
+    forums = sql_query("
+      SELECT
+        id,
+        forum_name,
+        forum_desc,
+        disp_position,
+        cat_id
+      FROM punbb_forums
+      ORDER BY id").to_a
+
+    restricteds = []
+    publics = []
+    create_categories(forums) do |forum|
+
+      read_restricted = (
+        (restricted_categories.include? forum["cat_id"].to_i) or
+        (restricted_forums.include? forum["id"].to_i)
+      )
+      if read_restricted
+        restricteds << forum
+      else
+        publics << forum
+      end
+
       {
-        id: "child##{category['id']}",
-        name: category["forum_name"],
-        read_restricted: restricted,
+        id: "child##{forum['id']}",
+        name: forum["forum_name"],
+        read_restricted: read_restricted,
         suppress_from_homepage: false,
-        description: category["forum_desc"],
-        parent_category_id: category_id_from_imported_category_id(category["parent_category_id"])
+        description: forum["forum_desc"],
+        parent_category_id: category_id_from_imported_category_id(forum["cat_id"])
       }
     end
 
+    puts "", "restricted forums (#{restricteds.length}):"
+    restricteds.each do |forum|
+      puts "#{forum["id"]}: #{forum["forum_name"]}"
+    end
 
-    puts "Protecting known categories"
+    puts "", "public forums: (#{publics.length}):"
+    publics.each do |forum|
+      puts "#{forum["id"]}: #{forum["forum_name"]}"
+    end
+
+    puts "", "Add all permissions to group CA"
     group_id = group_id_from_imported_group_id(VIRTUAL_GROUP_CA_ID)
     Category.find_by(:read_restricted == true) do |category|
-      puts "protecting category", category.name
       CategoryGroup.find_or_create_by(category_id: category.id, group_id: group_id) do |cg|
         cg.permission_type = CategoryGroup.permission_types[:full]
       end
