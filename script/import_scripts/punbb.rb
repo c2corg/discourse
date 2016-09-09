@@ -1,4 +1,5 @@
 require "pg"
+require 'optparse'
 
 require File.expand_path(File.dirname(__FILE__) + "/base.rb")
 
@@ -35,6 +36,15 @@ class ImportScripts::PunBB < ImportScripts::Base
       :password => "www-data",
       :dbname => PUNBB_DB
     )
+
+    @options = {}
+    OptionParser.new do |opts|
+      opts.banner = "Usage: #{$0} [options]"
+
+      opts.on("-t", "--topic=TOPIC_ID", "Filter source records by topics_id") do |topic|
+        @options[:topic] = topic
+      end
+    end.parse!
   end
 
   def execute
@@ -64,17 +74,31 @@ class ImportScripts::PunBB < ImportScripts::Base
   def import_users
     puts '', "creating users"
 
-    total_count = sql_query("SELECT count(*) count FROM users;").first['count']
+    sql = "
+      SELECT count(*) count
+      FROM app_users_private_data"
+    sql += "
+      WHERE app_users_private_data.id IN (
+        SELECT poster_id FROM punbb_posts WHERE punbb_posts.topic_id = #{@options[:topic]}
+      )" if @options[:topic]
+    total_count = sql_query(sql).first['count']
 
     batches(BATCH_SIZE) do |offset|
-      results = sql_query(
-        "SELECT id, username as forum_username, topo_name, url website, email, registered,
-                registration_ip, last_visit,
-                location, group_id
-         FROM app_users_private_data
-         ORDER BY id ASC
-         LIMIT #{BATCH_SIZE}
-         OFFSET #{offset};")
+      sql = "
+        SELECT app_users_private_data.id,
+          username as forum_username, topo_name, url website, email, registered,
+          registration_ip, last_visit,
+          location, group_id
+        FROM app_users_private_data"
+      sql += "
+        WHERE app_users_private_data.id IN (
+          SELECT poster_id FROM punbb_posts WHERE punbb_posts.topic_id = #{@options[:topic]}
+        )" if @options[:topic]
+      sql += "
+        ORDER BY id ASC
+        LIMIT #{BATCH_SIZE}
+        OFFSET #{offset};"
+      results = sql_query(sql)
 
       break if results.ntuples < 1
 
@@ -225,37 +249,51 @@ class ImportScripts::PunBB < ImportScripts::Base
   def import_posts
     puts "", "creating topics and posts"
 
-    total_count = sql_query("SELECT count(*) count from punbb_posts").first["count"]
+    sql = "
+      SELECT count(*) count
+      FROM punbb_posts"
+    sql += "
+      WHERE topic_id = #{@options[:topic]}" if @options[:topic]
+    total_count = sql_query(sql).first["count"]
 
     # In our old version we do not have t.first_post_id first_post_id,
     # ALTER TABLE punbb_topics ADD COLUMN first_post_id integer default 0;
     # UPDATE punbb_topics SET first_post_id = (select MIN(p.id) from punbb_posts as p where punbb_topics.id = p.topic_id);
     # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
-    batches(BATCH_SIZE, total_count.to_i * 99.9 / 100) do |offset|
-      results = sql_query("
-        SELECT id FROM punbb_posts ORDER BY posted
-        LIMIT #{BATCH_SIZE} OFFSET #{offset};
-      ").to_a
+    batches(BATCH_SIZE) do |offset|
+      sql = "
+        SELECT id
+        FROM punbb_posts"
+      sql += "
+        WHERE topic_id = #{@options[:topic]}" if @options[:topic]
+      sql += "
+        ORDER BY posted
+        LIMIT #{BATCH_SIZE} OFFSET #{offset};"
+      results = sql_query(sql).to_a
 
       break if results.size < 1
       next if all_records_exist? :posts, results.map {|u| u["id"].to_i}
 
-      results = sql_query("
-        SELECT p.id id,
-               p.poster poster,
-               t.id topic_id,
-               t.forum_id category_id,
-               t.subject title,
-               t.first_post_id,
-               p.poster_id user_id,
-               p.message raw,
-               p.posted created_at
+      sql = "
+        SELECT
+          p.id id,
+          p.poster poster,
+          t.id topic_id,
+          t.forum_id category_id,
+          t.subject title,
+          t.first_post_id,
+          p.poster_id user_id,
+          p.message raw,
+          p.posted created_at
         FROM punbb_posts p,
-             punbb_topics t
-        WHERE p.topic_id = t.id
+          punbb_topics t
+        WHERE p.topic_id = t.id"
+      sql += "
+          AND p.topic_id = #{@options[:topic]}" if @options[:topic]
+      sql += "
         ORDER BY p.posted
-        LIMIT #{BATCH_SIZE} OFFSET #{offset};
-      ").to_a
+        LIMIT #{BATCH_SIZE} OFFSET #{offset};"
+      results = sql_query(sql).to_a
 
       create_posts(results, total: total_count, offset: offset) do |m|
         skip = false
