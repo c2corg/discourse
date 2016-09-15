@@ -53,6 +53,10 @@ class ImportScripts::PunBB < ImportScripts::Base
     import_categories
     import_posts
     suspend_users
+
+    create_categories_permalinks
+    create_posts_permalinks
+    create_topics_permalinks
   end
 
   def import_groups
@@ -246,6 +250,51 @@ class ImportScripts::PunBB < ImportScripts::Base
     end
   end
 
+  def create_categories_permalinks
+    puts '', "creating categories redirections"
+
+    created = 0
+    skipped = 0
+    failed = 0
+
+    query = CategoryCustomField.
+            joins("LEFT JOIN permalinks ON permalinks.category_id = category_custom_fields.category_id").
+            where(name: 'import_id').
+            where("url IS NULL")
+
+    total_count = query.count
+
+    query.
+        select("category_custom_fields.id, category_custom_fields.category_id, value").
+        find_each do |custom_field|
+
+      category_id = custom_field.category_id
+      import_id = custom_field.value
+
+      matched = /child#(\d+)/.match(import_id)
+      if not matched  # no url to categories in punbb
+        skipped += 1
+        next
+      end
+      forum_id = matched[1]
+
+      url = "viewforum.php?id=#{forum_id}"
+      if Permalink.where(url: url).exists?
+        skipped += 1
+        next
+      end
+      permalink = Permalink.create(url: url, category_id: category_id)
+      if permalink
+        created += 1
+      else
+        failed += 1
+        puts "Failed to create permalink for forum id: #{forum_id}"
+      end
+
+      print_status  created + skipped + failed, total_count
+    end
+  end
+
   def import_posts
     puts "", "creating topics and posts"
 
@@ -331,6 +380,104 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     puts '', "updating posts sequence value"
     Post.exec_sql("select setval('posts_id_seq', (select max(id) + 1 from posts), false);")
+  end
+
+  def create_topics_permalinks
+    puts "", "creating topics redirections"
+
+    start_time = get_start_time("topic-permalinks")
+
+    sql = "
+      SELECT count(*) count
+      FROM punbb_topics"
+    sql += "
+      WHERE id = #{@options[:topic]}" if @options[:topic]
+    total_count = sql_query(sql).first["count"]
+
+    puts "total_count: #{total_count}"
+
+    batches(BATCH_SIZE) do |offset|
+      created = 0
+      skipped = 0
+      failed = 0
+
+      sql = "
+        SELECT
+          id,
+          first_post_id
+        FROM punbb_topics"
+      sql += "
+        WHERE id = #{@options[:topic]}" if @options[:topic]
+      sql += "
+        ORDER BY posted
+        LIMIT #{BATCH_SIZE} OFFSET #{offset};"
+      results = sql_query(sql).to_a
+
+      break if results.size < 1
+
+      results.each do |result|
+        import_id = result['id']
+        topic = topic_lookup_from_imported_post_id(result['first_post_id'])
+        if !topic
+          skipped += 1
+          next
+        end
+        url = "viewtopic.php?id=#{import_id}"
+        if Permalink.where(url: url).exists?
+          skipped += 1
+          next
+        end
+        permalink = Permalink.create(url: url, topic_id: topic[:topic_id])
+        if permalink
+          created += 1
+        else
+          puts "Failed to create permalink for topic id: #{import_id}"
+          failed += 1
+        end
+
+        print_status created + skipped + failed + (offset || 0), total_count, start_time
+      end
+    end
+  end
+
+  def create_posts_permalinks
+    puts "", "creating posts redirections"
+
+    start_time = get_start_time("post-permalinks")
+
+    created = 0
+    skipped = 0
+    failed = 0
+
+    query = PostCustomField.
+        joins("LEFT JOIN permalinks ON permalinks.post_id = post_custom_fields.post_id").
+        where(name: 'import_id').
+        where("url IS NULL")
+
+    total_count = query.count
+
+    query.
+        select("post_custom_fields.id, post_custom_fields.post_id, value").
+        find_each do |custom_field|
+
+      post_id = custom_field.post_id
+      import_id = custom_field.value
+
+      url = "viewtopic.php?pid=#{import_id}"
+      if Permalink.where(url: url).exists?
+        skipped += 1
+        next
+      end
+      permalink = Permalink.create(url: url, post_id: post_id)
+      if permalink
+        created += 1
+      else
+        failed += 1
+        puts "Failed to create permalink for post id: #{import_id}"
+      end
+
+      print_status  created + skipped + failed, total_count, start_time
+    end
   end
 
   def suspend_users
