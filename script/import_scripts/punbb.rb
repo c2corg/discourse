@@ -532,6 +532,10 @@ class ImportScripts::PunBB < ImportScripts::Base
   def process_punbb_post(raw, import_id)
     s = raw.dup
 
+    # Relate https://github.com/c2corg/v6_forum/issues/33
+    # transform [img=url][/img] to [img]url[/img]
+    s.gsub!(/\[img=([^\]]+)\]\[\/img\]/, '[img]\1[/img]')
+
     # :) is encoded as <!-- s:) --><img src="{SMILIES_PATH}/icon_e_smile.gif" alt=":)" title="Smile" /><!-- s:) -->
     s.gsub!(/<!-- s(\S+) -->(?:.*)<!-- s(?:\S+) -->/, '\1')
 
