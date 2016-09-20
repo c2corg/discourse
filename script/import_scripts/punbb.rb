@@ -361,10 +361,49 @@ class ImportScripts::PunBB < ImportScripts::Base
         # Force id to be the same as import_id
         mapped[:forced_id] = m['id']
 
-        if m['id'] == m['first_post_id']
+        is_first_post = m['id'] == m['first_post_id']
+        if is_first_post
           mapped[:category] = category_id_from_imported_category_id("child##{m['category_id']}")
           mapped[:title] = CGI.unescapeHTML(m['title'])
-        else
+
+          if m['category_id'] == '1' # Topoguide comments
+            # Create a first post with link to document
+            title = mapped[:title]
+            tokens = title.split('_')
+            document_id = tokens[0]
+            culture = tokens[1]
+            sql = "
+              SELECT name, module
+              FROM app_documents_i18n_archives
+              LEFT JOIN app_documents_archives
+                ON app_documents_archives.id = app_documents_i18n_archives.id
+              WHERE app_documents_i18n_archives.id = #{document_id};"
+            app_document = sql_query(sql).first
+            href = "https://www.camptocamp.org/#{app_document["module"]}/#{document_id}/#{culture}"
+
+            import_id = "first_comment_#{m['id']}"
+            comment_topic = {}
+            comment_topic[:user_id] = -1
+            comment_topic[:category] = mapped[:category]
+            comment_topic[:title] = mapped[:title]
+            comment_topic[:raw] = "<a href=\"#{href}\">#{app_document['name']}</a>"
+
+            new_post = create_post(comment_topic, import_id)
+            if new_post.is_a?(Post)
+              @lookup.add_post(import_id, new_post)
+              @lookup.add_topic(new_post)
+              created_post(new_post)
+            else
+              puts "Error creating post #{import_id}. Skipping."
+              puts new_post.inspect
+            end
+
+            is_first_post = false
+            m['first_post_id'] = import_id
+          end
+        end
+
+        if not is_first_post
           parent = topic_lookup_from_imported_post_id(m['first_post_id'])
           if parent
             mapped[:topic_id] = parent[:topic_id]
