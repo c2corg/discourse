@@ -379,7 +379,12 @@ class ImportScripts::PunBB < ImportScripts::Base
                 ON app_documents_archives.id = app_documents_i18n_archives.id
               WHERE app_documents_i18n_archives.id = #{document_id};"
             app_document = sql_query(sql).first
-            href = "https://www.camptocamp.org/#{app_document["module"]}/#{document_id}/#{culture}"
+
+            document_type = app_document["module"]
+            if ['summits', 'sites', 'huts', 'access', 'products'].include?(document_type)
+              document_type = 'waypoints'
+            end
+            href = "https://www.camptocamp.org/#{document_type}/#{document_id}/#{culture}"
 
             import_id = "first_comment_#{m['id']}"
             comment_topic = {}
