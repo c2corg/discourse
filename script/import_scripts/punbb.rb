@@ -295,8 +295,70 @@ class ImportScripts::PunBB < ImportScripts::Base
     end
   end
 
+  def update_v5_first_post_id
+    # In our old version we do not have t.first_post_id first_post_id
+    # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
+
+    puts "", "updating column punbb_topics.first_post_id"
+    sql = "
+      SELECT count(*) AS count
+      FROM information_schema.columns
+      WHERE
+        table_schema = 'public'
+        AND
+        table_name = 'punbb_topics'
+        AND
+        column_name = 'first_post_id';"
+    column_count = sql_query(sql).first["count"]
+    if column_count.to_s == "0"
+      sql_query('ALTER TABLE punbb_topics ADD COLUMN first_post_id integer;')
+    end
+
+    # update first_post_id base topic_id and posted (default for all forums)
+    sql_query("
+      UPDATE punbb_topics
+      SET
+        first_post_id = calculated_first_post_id
+      FROM (
+        SELECT *
+        FROM (
+          SELECT
+            topic_id,
+            first_value(punbb_posts.id) OVER (PARTITION BY topic_id ORDER BY punbb_posts.posted) AS calculated_first_post_id
+          FROM punbb_posts
+          ORDER BY topic_id, punbb_posts.posted
+        ) AS windowed
+        GROUP BY topic_id, calculated_first_post_id
+      ) AS grouped
+      WHERE grouped.topic_id = punbb_topics.id;
+    ")
+
+    # update first_post_id base on forum_id, subject and posted for the topoguide comments
+    # as we don't want duplicated topics for the same document
+    sql_query("
+      UPDATE punbb_topics
+      SET first_post_id = calculated_first_post_id
+      FROM (
+        SELECT *
+        FROM (
+          SELECT
+            topic_id,
+            first_value(punbb_posts.id) OVER (PARTITION BY forum_id, subject ORDER BY punbb_posts.posted) AS calculated_first_post_id
+          FROM punbb_posts
+          LEFT JOIN punbb_topics ON punbb_topics.id = punbb_posts.topic_id
+          WHERE forum_id = 1  -- only the topoguide comments
+          ORDER BY forum_id, subject, punbb_posts.posted
+        ) AS windowed
+        GROUP BY topic_id, calculated_first_post_id
+      ) AS grouped
+      WHERE grouped.topic_id = punbb_topics.id;
+    ")
+  end
+
   def import_posts
     puts "", "creating topics and posts"
+
+    update_v5_first_post_id
 
     sql = "
       SELECT count(*) count
@@ -305,10 +367,6 @@ class ImportScripts::PunBB < ImportScripts::Base
       WHERE topic_id = #{@options[:topic]}" if @options[:topic]
     total_count = sql_query(sql).first["count"]
 
-    # In our old version we do not have t.first_post_id first_post_id,
-    # ALTER TABLE punbb_topics ADD COLUMN first_post_id integer default 0;
-    # UPDATE punbb_topics SET first_post_id = (select MIN(p.id) from punbb_posts as p where punbb_topics.id = p.topic_id);
-    # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
     batches(BATCH_SIZE) do |offset|
       sql = "
         SELECT id
