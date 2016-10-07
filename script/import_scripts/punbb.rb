@@ -416,9 +416,6 @@ class ImportScripts::PunBB < ImportScripts::Base
 
         mapped[:created_at] = Time.zone.at(m['created_at'].to_i)
 
-        # Force id to be the same as import_id
-        mapped[:forced_id] = m['id']
-
         is_first_post = m['id'] == m['first_post_id']
         if is_first_post
           mapped[:category] = category_id_from_imported_category_id("child##{m['category_id']}")
