@@ -27,6 +27,8 @@ class ImportScripts::PunBB < ImportScripts::Base
   VIRTUAL_GROUPS_PARTNERS_ID = 6
 
   def initialize
+    step "initialize"
+
     super
 
     @client = PG::Connection.open(
@@ -59,7 +61,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def import_groups
-    puts '', "creating groups"
+    step "creating groups"
 
     groups = [
     {id: VIRTUAL_GROUP_ASSOCE_ID, name: "Association"},
@@ -75,7 +77,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def import_users
-    puts '', "creating users"
+    step "creating users"
 
     sql = "
       SELECT count(*) count
@@ -156,7 +158,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def import_categories
-    puts "", "importing top level categories..."
+    step "importing top level categories..."
 
     restricted_categories = [
       6,  # Site et Association
@@ -250,7 +252,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def create_categories_permalinks
-    puts '', "creating categories redirections"
+    step "creating categories redirections"
 
     created = 0
     skipped = 0
@@ -298,7 +300,8 @@ class ImportScripts::PunBB < ImportScripts::Base
     # In our old version we do not have t.first_post_id first_post_id
     # https://github.com/punbb/punbb/blob/56e0ca959537adcd44b307d9ed1cb177f9f302f3/admin/db_update.php#L1284-L1307
 
-    puts "", "updating column punbb_topics.first_post_id"
+    step "updating column punbb_topics.first_post_id"
+
     sql = "
       SELECT count(*) AS count
       FROM information_schema.columns
@@ -355,9 +358,9 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def import_posts
-    puts "", "creating topics and posts"
-
     update_v5_first_post_id
+
+    step "creating topics and posts"
 
     sql = "
       SELECT count(*) count
@@ -476,12 +479,12 @@ class ImportScripts::PunBB < ImportScripts::Base
       end
     end
 
-    puts '', "updating posts sequence value"
+    step "updating posts sequence value"
     Post.exec_sql("select setval('posts_id_seq', (select max(id) + 1 from posts), false);")
   end
 
   def create_topics_permalinks
-    puts "", "creating topics redirections"
+    step "creating topics redirections"
 
     start_time = get_start_time("topic-permalinks")
 
@@ -539,7 +542,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def create_posts_permalinks
-    puts "", "creating posts redirections"
+    step "creating posts redirections"
 
     start_time = get_start_time("post-permalinks")
 
@@ -579,7 +582,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   end
 
   def suspend_users
-    puts '', "updating banned users"
+    step "updating banned users"
 
     banned = 0
     failed = 0
@@ -666,6 +669,10 @@ class ImportScripts::PunBB < ImportScripts::Base
 
   def sql_query(sql)
     @client.exec(sql)
+  end
+
+  def step(message)
+    puts "", "#{Time.now.strftime("%Y-%m-%d %H:%M:%S")} #{message}"
   end
 end
 
