@@ -11,7 +11,6 @@ require 'pry'
 #   select u.username, cf.value from users as u, user_custom_fields as cf where u.id = cf.user_id and cf.name = 'import_username' and u.username != cf.value;
 class ImportScripts::PunBB < ImportScripts::Base
 
-  PUNBB_DB = "c2corg"
   BATCH_SIZE = 500
   GROUPS_ASSOCE = [5, 8, 13, 15, 26]
   GROUPS_ANCIENS = [10]
@@ -31,10 +30,10 @@ class ImportScripts::PunBB < ImportScripts::Base
     super
 
     @client = PG::Connection.open(
-      :host => "localhost",
-      :user => "www-data",
-      :password => "www-data",
-      :dbname => PUNBB_DB
+      :host => ENV["V5_PGHOST"],
+      :user => ENV["V5_PGUSER"],
+      :password => ENV["V5_PGPASSWORD"],
+      :dbname => ENV["V5_PGDATABASE"]
     )
 
     @options = {}
