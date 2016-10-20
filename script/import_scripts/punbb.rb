@@ -425,30 +425,12 @@ class ImportScripts::PunBB < ImportScripts::Base
 
           if m['category_id'] == '1' # Topoguide comments
             # Create a first post with link to document
-            title = mapped[:title]
-            tokens = title.split('_')
-            document_id = tokens[0]
-            culture = tokens[1]
-            sql = "
-              SELECT name, module
-              FROM app_documents_i18n_archives
-              LEFT JOIN app_documents_archives
-                ON app_documents_archives.id = app_documents_i18n_archives.id
-              WHERE app_documents_i18n_archives.id = #{document_id};"
-            app_document = sql_query(sql).first
-
-            document_type = app_document["module"]
-            if ['summits', 'sites', 'huts', 'access', 'products'].include?(document_type)
-              document_type = 'waypoints'
-            end
-            href = "https://www.camptocamp.org/#{document_type}/#{document_id}/#{culture}"
-
             import_id = "first_comment_#{m['id']}"
             comment_topic = {}
             comment_topic[:user_id] = -1
             comment_topic[:category] = mapped[:category]
             comment_topic[:title] = mapped[:title]
-            comment_topic[:raw] = "<a href=\"#{href}\">#{app_document['name']}</a>"
+            comment_topic[:raw] = topoguide_first_post_content(mapped[:title])
 
             new_post = create_post(comment_topic, import_id)
             if new_post.is_a?(Post)
@@ -478,9 +460,29 @@ class ImportScripts::PunBB < ImportScripts::Base
         skip ? nil : mapped
       end
     end
+  end
 
-    step "updating posts sequence value"
-    Post.exec_sql("select setval('posts_id_seq', (select max(id) + 1 from posts), false);")
+  def topoguide_first_post_content(title)
+    tokens = title.split('_')
+    document_id = tokens[0].to_i
+    return "Document not found" if document_id == 0
+    culture = tokens[1]
+    sql = "
+      SELECT name, module
+      FROM app_documents_i18n_archives
+      LEFT JOIN app_documents_archives
+        ON app_documents_archives.id = app_documents_i18n_archives.id
+      WHERE app_documents_i18n_archives.id = #{document_id};"
+    app_document = sql_query(sql).first
+    return "Document not found" if app_document.nil?
+
+    document_type = app_document["module"]
+    if ['summits', 'sites', 'huts', 'access', 'products'].include?(document_type)
+      document_type = 'waypoints'
+    end
+    href = "https://www.camptocamp.org/#{document_type}/#{document_id}/#{culture}"
+
+    "<a href=\"#{href}\">#{app_document['name']}</a>"
   end
 
   def create_topics_permalinks
