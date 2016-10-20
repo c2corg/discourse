@@ -614,20 +614,22 @@ class ImportScripts::PunBB < ImportScripts::Base
     end
   end
 
-  def rewriteQuote(quote)
+  def rewriteQuote(quote, post_import_id)
     trimed = quote[7...-1]
     splitted = trimed.split('|')
+    return quote if splitted.length < 2
+
     user = splitted[0].gsub('"', '_')
-    import_id = splitted[1]
+    quote_import_id = splitted[1]
+    discourse_id = post_id_from_imported_post_id(quote_import_id)
+    return quote if discourse_id.nil?
 
-    discourse_id = post_id_from_imported_post_id(import_id)
     post = post_content_from_discourse_post_id(discourse_id)
-
     "[quote=\"#{user}, id: #{discourse_id}, post:#{post[:post_number]}, topic:#{post[:topic_id]}\"]"
   rescue => e
     # Error, linked post is incorrect or not imported.
     # Keeping the quote as-is.
-    puts "Cannot rewrite quote #{quote}"
+    puts "Cannot rewrite quote #{quote} in post #{post_import_id}"
     quote
   end
 
@@ -664,7 +666,7 @@ class ImportScripts::PunBB < ImportScripts::Base
     # Rewrite quotes: add post number, topic ...
     # [quote=mollotof|2087176] -> [quote="mollotof, id: 2087176, post:23, topic:11892"]
     quote_pattern = /\[quote=[^\]]*\]/
-    s.gsub!(quote_pattern) {|quote| rewriteQuote(quote)}
+    s.gsub!(quote_pattern) {|quote| rewriteQuote(quote, import_id)}
 
     s
   end
