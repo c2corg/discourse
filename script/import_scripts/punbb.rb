@@ -45,6 +45,9 @@ class ImportScripts::PunBB < ImportScripts::Base
       opts.on("-t", "--topic=TOPIC_ID", "Filter source records by topics_id") do |topic|
         @options[:topic] = topic
       end
+      opts.on("-t", "--firstpost=FIRST_POST_ID", "Start at this first post") do |firstpost|
+        @options[:firstpost] = firstpost
+      end
     end.parse!
   end
 
@@ -364,19 +367,25 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     sql = "
       SELECT count(*) count
-      FROM punbb_posts"
+      FROM punbb_posts p
+      LEFT JOIN punbb_topics t ON p.topic_id = t.id"
     sql += "
       WHERE topic_id = #{@options[:topic]}" if @options[:topic]
+    sql += "
+      WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
     total_count = sql_query(sql).first["count"]
 
     batches(BATCH_SIZE) do |offset|
       sql = "
-        SELECT id
-        FROM punbb_posts"
+        SELECT p.id
+        FROM punbb_posts p
+        LEFT JOIN punbb_topics t ON p.topic_id = t.id"
       sql += "
         WHERE topic_id = #{@options[:topic]}" if @options[:topic]
       sql += "
-        ORDER BY posted
+        WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
+      sql += "
+        ORDER BY p.posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};"
       results = sql_query(sql).to_a
 
@@ -394,11 +403,12 @@ class ImportScripts::PunBB < ImportScripts::Base
           p.poster_id user_id,
           p.message raw,
           p.posted created_at
-        FROM punbb_posts p,
-          punbb_topics t
-        WHERE p.topic_id = t.id"
+        FROM punbb_posts p
+        LEFT JOIN punbb_topics t ON p.topic_id = t.id"
       sql += "
-          AND p.topic_id = #{@options[:topic]}" if @options[:topic]
+          WHERE p.topic_id = #{@options[:topic]}" if @options[:topic]
+      sql += "
+          WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
       sql += "
         ORDER BY p.posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};"
