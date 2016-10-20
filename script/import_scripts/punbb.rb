@@ -637,6 +637,7 @@ class ImportScripts::PunBB < ImportScripts::Base
   def rewriteQuote(quote, post_import_id)
     trimed = quote[7...-1]
     splitted = trimed.split('|')
+    return "[quote=\"Citation\"]" if splitted.length < 1
     return quote if splitted.length < 2
 
     user = splitted[0].gsub('"', '_')
