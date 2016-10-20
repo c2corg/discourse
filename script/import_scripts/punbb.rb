@@ -405,9 +405,11 @@ class ImportScripts::PunBB < ImportScripts::Base
           t.first_post_id,
           p.poster_id user_id,
           p.message raw,
-          p.posted created_at
+          p.posted created_at,
+          f.culture
         FROM punbb_posts p
-        LEFT JOIN punbb_topics t ON p.topic_id = t.id"
+        LEFT JOIN punbb_topics t ON p.topic_id = t.id
+        LEFT JOIN punbb_forums f ON f.id = t.forum_id"
       sql += "
           WHERE p.topic_id = #{@options[:topic]}" if @options[:topic]
       sql += "
@@ -426,7 +428,12 @@ class ImportScripts::PunBB < ImportScripts::Base
         mapped[:raw] = process_punbb_post(m['raw'], m['id'])
         if mapped[:user_id] == -1
           ## Prepend the poster name when the poster was anonymous.
-          mapped[:raw] = "Posted as guest by _#{m['poster']}_:\n\n#{mapped[:raw]}"
+          if m['culture'] == 'fr'
+            poster_prefix = "Posté en tant qu'invité par"
+          else
+            poster_prefix = "Posted as guest by"
+          end
+          mapped[:raw] = "#{poster_prefix} _#{m['poster']}_:\n\n#{mapped[:raw]}"
         end
 
         mapped[:created_at] = Time.zone.at(m['created_at'].to_i)
