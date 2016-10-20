@@ -686,6 +686,9 @@ class ImportScripts::PunBB < ImportScripts::Base
     # Work around it for now:
     s.gsub!(/\[http(s)?:\/\/(www\.)?/, '[')
 
+    # https://github.com/c2corg/v6_forum/issues/33
+    s.gsub!(/^\+ 1$/, '+1')
+
     # Rewrite quotes: add post number, topic ...
     # [quote=mollotof|2087176] -> [quote="mollotof, id: 2087176, post:23, topic:11892"]
     quote_pattern = /\[quote=[^\]]*\]/
