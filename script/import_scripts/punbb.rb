@@ -376,6 +376,9 @@ class ImportScripts::PunBB < ImportScripts::Base
     total_count = sql_query(sql).first["count"]
 
     batches(BATCH_SIZE) do |offset|
+      start_time = get_start_time("posts-#{total_count}") # the post count should be unique enough to differentiate between posts and PMs
+      print_status(offset, total_count, start_time)
+
       sql = "
         SELECT p.id
         FROM punbb_posts p
