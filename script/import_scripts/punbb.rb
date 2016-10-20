@@ -650,6 +650,9 @@ class ImportScripts::PunBB < ImportScripts::Base
   def process_punbb_post(raw, import_id)
     s = raw.dup
 
+    # error with [url]aide[/url] or [url]association.circuitderando.com[/url]
+    s.gsub!(/\[url\](a.*)\[\/url\]/, '[url]http://\1[/url]')
+
     # Relate https://github.com/c2corg/v6_forum/issues/33
     # transform [img=url][/img] to [img]url[/img]
     s.gsub!(/\[img=([^\]]+)\]\[\/img\]/, '[img]\1[/img]')
