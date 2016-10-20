@@ -653,6 +653,22 @@ class ImportScripts::PunBB < ImportScripts::Base
     quote
   end
 
+  def rewriteSpoiler(spoiler, post_import_id)
+    trimed = spoiler[1...-1]
+    splitted = trimed.split('=')
+    if splitted.length == 1
+      title = '(Cliquez pour afficher)'
+    else
+      title = splitted[1]
+    end
+
+    "<details><summary>#{title}</summary>"
+  rescue => e
+    # Error, linked post is incorrect or not imported.
+    # Keeping the quote as-is.
+    puts "Cannot rewrite spoiler #{spoiler} in post #{post_import_id}"
+    spoiler
+  end
 
   def process_punbb_post(raw, import_id)
     s = raw.dup
@@ -692,6 +708,10 @@ class ImportScripts::PunBB < ImportScripts::Base
     # [c] => [code] and [/c] => [/code] https://github.com/c2corg/v6_forum/issues/33
     s.gsub!(/\[c\]/, '[code]')
     s.gsub!(/\[\/c\]/, '[/code]')
+
+    # spoilers
+    s.gsub!(/\[spoiler[^\]]*\]/) {|spoiler| rewriteSpoiler(spoiler, import_id)}
+    s.gsub!(/\[\/spoiler\]/, '</details>')
 
     # Rewrite quotes: add post number, topic ...
     # [quote=mollotof|2087176] -> [quote="mollotof, id: 2087176, post:23, topic:11892"]
