@@ -45,6 +45,9 @@ class ImportScripts::PunBB < ImportScripts::Base
       opts.on("-t", "--topic=TOPIC_ID", "Filter source records by topics_id") do |topic|
         @options[:topic] = topic
       end
+      opts.on("-t", "--firstpost=FIRST_POST_ID", "Start at this first post") do |firstpost|
+        @options[:firstpost] = firstpost
+      end
     end.parse!
   end
 
@@ -364,19 +367,28 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     sql = "
       SELECT count(*) count
-      FROM punbb_posts"
+      FROM punbb_posts p
+      LEFT JOIN punbb_topics t ON p.topic_id = t.id"
     sql += "
       WHERE topic_id = #{@options[:topic]}" if @options[:topic]
+    sql += "
+      WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
     total_count = sql_query(sql).first["count"]
 
     batches(BATCH_SIZE) do |offset|
+      start_time = get_start_time("posts-#{total_count}") # the post count should be unique enough to differentiate between posts and PMs
+      print_status(offset, total_count, start_time)
+
       sql = "
-        SELECT id
-        FROM punbb_posts"
+        SELECT p.id
+        FROM punbb_posts p
+        LEFT JOIN punbb_topics t ON p.topic_id = t.id"
       sql += "
         WHERE topic_id = #{@options[:topic]}" if @options[:topic]
       sql += "
-        ORDER BY posted
+        WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
+      sql += "
+        ORDER BY p.posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};"
       results = sql_query(sql).to_a
 
@@ -393,12 +405,15 @@ class ImportScripts::PunBB < ImportScripts::Base
           t.first_post_id,
           p.poster_id user_id,
           p.message raw,
-          p.posted created_at
-        FROM punbb_posts p,
-          punbb_topics t
-        WHERE p.topic_id = t.id"
+          p.posted created_at,
+          f.culture
+        FROM punbb_posts p
+        LEFT JOIN punbb_topics t ON p.topic_id = t.id
+        LEFT JOIN punbb_forums f ON f.id = t.forum_id"
       sql += "
-          AND p.topic_id = #{@options[:topic]}" if @options[:topic]
+          WHERE p.topic_id = #{@options[:topic]}" if @options[:topic]
+      sql += "
+          WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
       sql += "
         ORDER BY p.posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};"
@@ -413,7 +428,12 @@ class ImportScripts::PunBB < ImportScripts::Base
         mapped[:raw] = process_punbb_post(m['raw'], m['id'])
         if mapped[:user_id] == -1
           ## Prepend the poster name when the poster was anonymous.
-          mapped[:raw] = "Posted as guest by _#{m['poster']}_:\n\n#{mapped[:raw]}"
+          if m['culture'] == 'fr'
+            poster_prefix = "Posté en tant qu'invité par"
+          else
+            poster_prefix = "Posted as guest by"
+          end
+          mapped[:raw] = "#{poster_prefix} _#{m['poster']}_:\n\n#{mapped[:raw]}"
         end
 
         mapped[:created_at] = Time.zone.at(m['created_at'].to_i)
@@ -425,30 +445,12 @@ class ImportScripts::PunBB < ImportScripts::Base
 
           if m['category_id'] == '1' # Topoguide comments
             # Create a first post with link to document
-            title = mapped[:title]
-            tokens = title.split('_')
-            document_id = tokens[0]
-            culture = tokens[1]
-            sql = "
-              SELECT name, module
-              FROM app_documents_i18n_archives
-              LEFT JOIN app_documents_archives
-                ON app_documents_archives.id = app_documents_i18n_archives.id
-              WHERE app_documents_i18n_archives.id = #{document_id};"
-            app_document = sql_query(sql).first
-
-            document_type = app_document["module"]
-            if ['summits', 'sites', 'huts', 'access', 'products'].include?(document_type)
-              document_type = 'waypoints'
-            end
-            href = "https://www.camptocamp.org/#{document_type}/#{document_id}/#{culture}"
-
             import_id = "first_comment_#{m['id']}"
             comment_topic = {}
             comment_topic[:user_id] = -1
             comment_topic[:category] = mapped[:category]
             comment_topic[:title] = mapped[:title]
-            comment_topic[:raw] = "<a href=\"#{href}\">#{app_document['name']}</a>"
+            comment_topic[:raw] = topoguide_first_post_content(mapped[:title])
 
             new_post = create_post(comment_topic, import_id)
             if new_post.is_a?(Post)
@@ -478,9 +480,29 @@ class ImportScripts::PunBB < ImportScripts::Base
         skip ? nil : mapped
       end
     end
+  end
 
-    step "updating posts sequence value"
-    Post.exec_sql("select setval('posts_id_seq', (select max(id) + 1 from posts), false);")
+  def topoguide_first_post_content(title)
+    tokens = title.split('_')
+    document_id = tokens[0].to_i
+    return "Document not found" if document_id == 0
+    culture = tokens[1]
+    sql = "
+      SELECT name, module
+      FROM app_documents_i18n_archives
+      LEFT JOIN app_documents_archives
+        ON app_documents_archives.id = app_documents_i18n_archives.id
+      WHERE app_documents_i18n_archives.id = #{document_id};"
+    app_document = sql_query(sql).first
+    return "Document not found" if app_document.nil?
+
+    document_type = app_document["module"]
+    if ['summits', 'sites', 'huts', 'access', 'products'].include?(document_type)
+      document_type = 'waypoints'
+    end
+    href = "https://www.camptocamp.org/#{document_type}/#{document_id}/#{culture}"
+
+    "<a href=\"#{href}\">#{app_document['name']}</a>"
   end
 
   def create_topics_permalinks
@@ -612,26 +634,48 @@ class ImportScripts::PunBB < ImportScripts::Base
     end
   end
 
-  def rewriteQuote(quote)
+  def rewriteQuote(quote, post_import_id)
     trimed = quote[7...-1]
     splitted = trimed.split('|')
+    return "[quote=\"Citation\"]" if splitted.length < 1
+    return quote if splitted.length < 2
+
     user = splitted[0].gsub('"', '_')
-    import_id = splitted[1]
+    quote_import_id = splitted[1]
+    discourse_id = post_id_from_imported_post_id(quote_import_id)
+    return quote if discourse_id.nil?
 
-    discourse_id = post_id_from_imported_post_id(import_id)
     post = post_content_from_discourse_post_id(discourse_id)
-
     "[quote=\"#{user}, id: #{discourse_id}, post:#{post[:post_number]}, topic:#{post[:topic_id]}\"]"
   rescue => e
     # Error, linked post is incorrect or not imported.
     # Keeping the quote as-is.
-    puts "Cannot rewrite quote #{quote}"
+    puts "Cannot rewrite quote #{quote} in post #{post_import_id}"
     quote
   end
 
+  def rewriteSpoiler(spoiler, post_import_id)
+    trimed = spoiler[1...-1]
+    splitted = trimed.split('=')
+    if splitted.length == 1
+      title = '(Cliquez pour afficher)'
+    else
+      title = splitted[1]
+    end
+
+    "<details><summary>#{title}</summary>"
+  rescue => e
+    # Error, linked post is incorrect or not imported.
+    # Keeping the quote as-is.
+    puts "Cannot rewrite spoiler #{spoiler} in post #{post_import_id}"
+    spoiler
+  end
 
   def process_punbb_post(raw, import_id)
     s = raw.dup
+
+    # error with [url]aide[/url] or [url]association.circuitderando.com[/url]
+    s.gsub!(/\[url\](a.*)\[\/url\]/, '[url]http://\1[/url]')
 
     # Relate https://github.com/c2corg/v6_forum/issues/33
     # transform [img=url][/img] to [img]url[/img]
@@ -659,10 +703,21 @@ class ImportScripts::PunBB < ImportScripts::Base
     # Work around it for now:
     s.gsub!(/\[http(s)?:\/\/(www\.)?/, '[')
 
+    # https://github.com/c2corg/v6_forum/issues/33
+    s.gsub!(/^\+ 1$/, '+1')
+
+    # [c] => [code] and [/c] => [/code] https://github.com/c2corg/v6_forum/issues/33
+    s.gsub!(/\[c\]/, '[code]')
+    s.gsub!(/\[\/c\]/, '[/code]')
+
+    # spoilers
+    s.gsub!(/\[spoiler[^\]]*\]/) {|spoiler| rewriteSpoiler(spoiler, import_id)}
+    s.gsub!(/\[\/spoiler\]/, '</details>')
+
     # Rewrite quotes: add post number, topic ...
     # [quote=mollotof|2087176] -> [quote="mollotof, id: 2087176, post:23, topic:11892"]
     quote_pattern = /\[quote=[^\]]*\]/
-    s.gsub!(quote_pattern) {|quote| rewriteQuote(quote)}
+    s.gsub!(quote_pattern) {|quote| rewriteQuote(quote, import_id)}
 
     s
   end
