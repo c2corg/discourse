@@ -669,7 +669,7 @@ class ImportScripts::PunBB < ImportScripts::Base
       title = splitted[1]
     end
 
-    "<details><summary>#{title}</summary>"
+    "[details=#{title}]"
   rescue => e
     # Error, linked post is incorrect or not imported.
     # Keeping the quote as-is.
@@ -718,7 +718,7 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     # spoilers
     s.gsub!(/\[spoiler[^\]]*\]/) {|spoiler| rewriteSpoiler(spoiler, import_id)}
-    s.gsub!(/\[\/spoiler\]/, '</details>')
+    s.gsub!(/\[\/spoiler\]/, '[/details]')
 
     # Rewrite quotes: add post number, topic ...
     # [quote=mollotof|2087176] -> [quote="mollotof, id: 2087176, post:23, topic:11892"]
