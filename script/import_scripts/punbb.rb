@@ -43,10 +43,13 @@ class ImportScripts::PunBB < ImportScripts::Base
       opts.banner = "Usage: #{$0} [options]"
 
       opts.on("-t", "--topic=TOPIC_ID", "Filter source records by topics_id") do |topic|
-        @options[:topic] = topic
+        @options[:topic] = topic.to_i
       end
-      opts.on("-t", "--firstpost=FIRST_POST_ID", "Start at this first post") do |firstpost|
-        @options[:firstpost] = firstpost
+      opts.on("-f", "--firstpost=FIRST_POST_ID", "Start at this first post") do |firstpost|
+        @options[:firstpost] = firstpost.to_i
+      end
+      opts.on("-o", "--offset=OFFSET", "Start with offset on posts") do |offset|
+        @options[:offset] = offset.to_i
       end
     end.parse!
   end
@@ -375,7 +378,7 @@ class ImportScripts::PunBB < ImportScripts::Base
       WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
     total_count = sql_query(sql).first["count"]
 
-    batches(BATCH_SIZE) do |offset|
+    batches(BATCH_SIZE, @options[:offset] || 0) do |offset|
       start_time = get_start_time("posts-#{total_count}") # the post count should be unique enough to differentiate between posts and PMs
       print_status(offset, total_count, start_time)
 
