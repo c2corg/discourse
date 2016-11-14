@@ -43,10 +43,13 @@ class ImportScripts::PunBB < ImportScripts::Base
       opts.banner = "Usage: #{$0} [options]"
 
       opts.on("-t", "--topic=TOPIC_ID", "Filter source records by topics_id") do |topic|
-        @options[:topic] = topic
+        @options[:topic] = topic.to_i
       end
-      opts.on("-t", "--firstpost=FIRST_POST_ID", "Start at this first post") do |firstpost|
-        @options[:firstpost] = firstpost
+      opts.on("-f", "--firstpost=FIRST_POST_ID", "Start at this first post") do |firstpost|
+        @options[:firstpost] = firstpost.to_i
+      end
+      opts.on("-o", "--offset=OFFSET", "Start with offset on posts") do |offset|
+        @options[:offset] = offset.to_i
       end
     end.parse!
   end
@@ -368,25 +371,27 @@ class ImportScripts::PunBB < ImportScripts::Base
     sql = "
       SELECT count(*) count
       FROM punbb_posts p
-      LEFT JOIN punbb_topics t ON p.topic_id = t.id"
+      LEFT JOIN punbb_topics t ON p.topic_id = t.id
+    WHERE t.id IS NOT NULL"  # avoid orphan posts
     sql += "
-      WHERE topic_id = #{@options[:topic]}" if @options[:topic]
+        AND topic_id = #{@options[:topic]}" if @options[:topic]
     sql += "
-      WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
+        AND t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
     total_count = sql_query(sql).first["count"]
 
-    batches(BATCH_SIZE) do |offset|
+    batches(BATCH_SIZE, @options[:offset] || 0) do |offset|
       start_time = get_start_time("posts-#{total_count}") # the post count should be unique enough to differentiate between posts and PMs
       print_status(offset, total_count, start_time)
 
       sql = "
         SELECT p.id
         FROM punbb_posts p
-        LEFT JOIN punbb_topics t ON p.topic_id = t.id"
+        LEFT JOIN punbb_topics t ON p.topic_id = t.id
+      WHERE t.id IS NOT NULL"  # avoid orphan posts
       sql += "
-        WHERE topic_id = #{@options[:topic]}" if @options[:topic]
+          AND topic_id = #{@options[:topic]}" if @options[:topic]
       sql += "
-        WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
+          AND t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
       sql += "
         ORDER BY p.posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};"
@@ -409,11 +414,12 @@ class ImportScripts::PunBB < ImportScripts::Base
           f.culture
         FROM punbb_posts p
         LEFT JOIN punbb_topics t ON p.topic_id = t.id
-        LEFT JOIN punbb_forums f ON f.id = t.forum_id"
+        LEFT JOIN punbb_forums f ON f.id = t.forum_id
+        WHERE t.id IS NOT NULL"  # avoid orphan posts
       sql += "
-          WHERE p.topic_id = #{@options[:topic]}" if @options[:topic]
+          AND p.topic_id = #{@options[:topic]}" if @options[:topic]
       sql += "
-          WHERE t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
+          AND t.first_post_id > #{@options[:firstpost]}" if @options[:firstpost]
       sql += "
         ORDER BY p.posted
         LIMIT #{BATCH_SIZE} OFFSET #{offset};"
@@ -663,7 +669,7 @@ class ImportScripts::PunBB < ImportScripts::Base
       title = splitted[1]
     end
 
-    "<details><summary>#{title}</summary>"
+    "[details=#{title}]"
   rescue => e
     # Error, linked post is incorrect or not imported.
     # Keeping the quote as-is.
@@ -712,7 +718,7 @@ class ImportScripts::PunBB < ImportScripts::Base
 
     # spoilers
     s.gsub!(/\[spoiler[^\]]*\]/) {|spoiler| rewriteSpoiler(spoiler, import_id)}
-    s.gsub!(/\[\/spoiler\]/, '</details>')
+    s.gsub!(/\[\/spoiler\]/, '[/details]')
 
     # Rewrite quotes: add post number, topic ...
     # [quote=mollotof|2087176] -> [quote="mollotof, id: 2087176, post:23, topic:11892"]
