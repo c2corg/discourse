@@ -75,8 +75,9 @@ const DiscourseRoute = Ember.Route.extend({
 });
 
 export function cleanDOM() {
-  // Close mini profiler
-  $('.profiler-results .profiler-result').remove();
+  if (window.MiniProfiler) {
+    window.MiniProfiler.pageTransition();
+  }
 
   // Close some elements that may be open
   $('header ul.icons li').removeClass('active');
@@ -93,7 +94,7 @@ export function cleanDOM() {
   $(document.activeElement).not("body").not(".no-blur").blur();
 
   Discourse.set('notifyCount',0);
-  $('#discourse-modal').modal('hide');
+  Discourse.__container__.lookup('route:application').send('closeModal');
   const hideDropDownFunction = $('html').data('hide-dropdown');
   if (hideDropDownFunction) { hideDropDownFunction(); }
 

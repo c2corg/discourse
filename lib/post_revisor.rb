@@ -72,6 +72,29 @@ class PostRevisor
     tc.check_result(tc.topic.change_category_to_id(category_id))
   end
 
+  track_topic_field(:tags) do |tc, tags|
+    if tc.guardian.can_tag_topics?
+      prev_tags = tc.topic.tags.map(&:name)
+      next if tags.blank? && prev_tags.blank?
+      if !DiscourseTagging.tag_topic_by_names(tc.topic, tc.guardian, tags)
+        tc.check_result(false)
+        next
+      end
+      tc.record_change('tags', prev_tags, tags) unless prev_tags.sort == tags.sort
+    end
+  end
+
+  track_topic_field(:tags_empty_array) do |tc, val|
+    if val.present? && tc.guardian.can_tag_topics?
+      prev_tags = tc.topic.tags.map(&:name)
+      if !DiscourseTagging.tag_topic_by_names(tc.topic, tc.guardian, [])
+        tc.check_result(false)
+        next
+      end
+      tc.record_change('tags', prev_tags, nil)
+    end
+  end
+
   # AVAILABLE OPTIONS:
   # - revised_at: changes the date of the revision
   # - force_new_version: bypass ninja-edit window
@@ -154,6 +177,7 @@ class PostRevisor
     POST_TRACKED_FIELDS.each do |field|
       return true if @fields.has_key?(field) && @fields[field] != @post.send(field)
     end
+    advance_draft_sequence
     false
   end
 
@@ -174,6 +198,7 @@ class PostRevisor
   end
 
   def ninja_edit?
+    return false if @post.has_active_flag?
     @revised_at - @last_version_at <= SiteSetting.editing_grace_period.to_i
   end
 
@@ -361,7 +386,7 @@ class PostRevisor
   end
 
   def bypass_bump?
-    !@post_successfully_saved || @opts[:bypass_bump] == true
+    !@post_successfully_saved || @topic_changes.errored? || @opts[:bypass_bump] == true
   end
 
   def is_last_post?
@@ -431,7 +456,14 @@ class PostRevisor
   end
 
   def publish_changes
-    @post.publish_change_to_clients!(:revised)
+    options =
+      if !@topic_changes.diff.empty? && !@topic_changes.errored?
+        { reload_topic: true }
+      else
+        {}
+      end
+
+    @post.publish_change_to_clients!(:revised, options)
   end
 
   def grant_badge

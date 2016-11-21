@@ -1,4 +1,5 @@
 module UserNameSuggester
+  GENERIC_NAMES = ['i', 'me', 'info', 'support', 'admin', 'webmaster', 'hello', 'mail', 'office', 'contact', 'team']
 
   def self.suggest(name, allow_username = nil)
     return unless name.present?
@@ -11,7 +12,7 @@ module UserNameSuggester
       # When 'walter@white.com' take 'walter'
       name = Regexp.last_match[1]
       # When 'me@eviltrout.com' take 'eviltrout'
-      name = Regexp.last_match[2] if ['i', 'me'].include?(name)
+      name = Regexp.last_match[2] if GENERIC_NAMES.include?(name)
     end
     name
   end
@@ -41,14 +42,21 @@ module UserNameSuggester
     # 2. removes unallowed leading characters
     name.gsub!(/^\W+/, "")
     # 3. removes unallowed trailing characters
-    name.gsub!(/[^A-Za-z0-9]+$/, "")
+    name = remove_unallowed_trailing_characters(name)
     # 4. unify special characters
     name.gsub!(/[-_.]{2,}/, "_")
     name
   end
 
+  def self.remove_unallowed_trailing_characters(name)
+    name.gsub!(/[^A-Za-z0-9]+$/, "")
+    name
+  end
+
   def self.rightsize_username(name)
-    name.ljust(User.username_length.begin, '1')[0, User.username_length.end]
+    name = name[0, User.username_length.end]
+    name = remove_unallowed_trailing_characters(name)
+    name.ljust(User.username_length.begin, '1')
   end
 
 end

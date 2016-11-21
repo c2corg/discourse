@@ -11,7 +11,7 @@ class TopicsBulkAction
   def self.operations
     @operations ||= %w(change_category close archive change_notification_level
                        reset_read dismiss_posts delete unlist archive_messages
-                       move_messages_to_inbox)
+                       move_messages_to_inbox change_tags)
   end
 
   def self.register_operation(name, &block)
@@ -43,9 +43,9 @@ class TopicsBulkAction
       topics.each do |t|
         if guardian.can_see?(t) && t.private_message?
           if group
-            GroupArchivedMessage.where(group_id: group.id, topic_id: t.id).destroy_all
+            GroupArchivedMessage.move_to_inbox!(group.id, t.id)
           else
-            UserArchivedMessage.where(user_id: @user.id, topic_id: t.id).destroy_all
+            UserArchivedMessage.move_to_inbox!(@user.id,t.id)
           end
         end
       end
@@ -56,9 +56,9 @@ class TopicsBulkAction
       topics.each do |t|
         if guardian.can_see?(t) && t.private_message?
           if group
-            GroupArchivedMessage.create!(group_id: group.id, topic_id: t.id)
+            GroupArchivedMessage.archive!(group.id, t.id)
           else
-            UserArchivedMessage.create!(user_id: @user.id, topic_id: t.id)
+            UserArchivedMessage.archive!(@user.id, t.id)
           end
         end
       end
@@ -127,6 +127,22 @@ class TopicsBulkAction
     def delete
       topics.each do |t|
         t.trash! if guardian.can_delete?(t)
+      end
+    end
+
+    def change_tags
+      tags = @operation[:tags]
+      tags = DiscourseTagging.tags_for_saving(tags, guardian) if tags.present?
+
+      topics.each do |t|
+        if guardian.can_edit?(t)
+          if tags.present?
+            DiscourseTagging.tag_topic_by_names(t, guardian, tags)
+          else
+            t.tags = []
+          end
+          @changed_ids << t.id
+        end
       end
     end
 

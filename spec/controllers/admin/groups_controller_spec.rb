@@ -32,8 +32,10 @@ describe Admin::GroupsController do
         "primary_group"=>false,
         "grant_trust_level"=>nil,
         "incoming_email"=>nil,
-        "notification_level"=>3,
-        "has_messages"=>false
+        "notification_level"=>2,
+        "has_messages"=>false,
+        "is_member"=>true,
+        "mentionable"=>false
       }])
     end
 

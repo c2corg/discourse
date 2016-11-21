@@ -28,7 +28,7 @@ module ImportScripts::PhpBB3
     def add_default_smilies
       {
         [':D', ':-D', ':grin:'] => ':smiley:',
-        [':)', ':-)', ':smile:'] => ':smile:',
+        [':)', ':-)', ':smile:'] => ':slight_smile:',
         [';)', ';-)', ':wink:'] => ':wink:',
         [':(', ':-(', ':sad:'] => ':frowning:',
         [':o', ':-o', ':eek:'] => ':astonished:',
@@ -47,7 +47,8 @@ module ImportScripts::PhpBB3
         [':?:'] => ':question:',
         [':idea:'] => ':bulb:',
         [':arrow:'] => ':arrow_right:',
-        [':|', ':-|'] => ':neutral_face:'
+        [':|', ':-|'] => ':neutral_face:',
+        [':geek:'] => ':nerd:'
       }.each do |smilies, emoji|
         smilies.each { |smiley| @smiley_map[smiley] = emoji }
       end

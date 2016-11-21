@@ -64,15 +64,13 @@ class QueuedPost < ActiveRecord::Base
     QueuedPost.transaction do
       change_to!(:approved, approved_by)
 
-      if user.blocked?
-        user.update_columns(blocked: false)
-      end
+      UserBlocker.unblock(user, approved_by) if user.blocked?
 
       creator = PostCreator.new(user, create_options.merge(skip_validations: true))
       created_post = creator.create
 
       unless created_post && creator.errors.blank?
-        raise StandardError, "Failed to create post #{raw[0..100]} #{creator.errors.full_messages.inspect}"
+        raise StandardError.new(creator.errors.full_messages.join(" "))
       end
 
     end
@@ -114,7 +112,7 @@ end
 # Table name: queued_posts
 #
 #  id             :integer          not null, primary key
-#  queue          :string(255)      not null
+#  queue          :string           not null
 #  state          :integer          not null
 #  user_id        :integer          not null
 #  raw            :text             not null

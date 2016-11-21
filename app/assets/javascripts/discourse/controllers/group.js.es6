@@ -4,13 +4,25 @@ var Tab = Em.Object.extend({
   @computed('name')
   location(name) {
     return 'group.' + name;
+  },
+
+  @computed('name')
+  message(name) {
+    return I18n.t('groups.' + name);
   }
 });
 
 
 export default Ember.Controller.extend({
   counts: null,
-  showing: 'posts',
+  showing: 'members',
+  tabs: [
+    Tab.create({ name: 'members', active: true, 'location': 'group.index' }),
+    Tab.create({ name: 'posts' }),
+    Tab.create({ name: 'topics' }),
+    Tab.create({ name: 'mentions' }),
+    Tab.create({ name: 'messages', requiresMembership: true })
+  ],
 
   @observes('counts')
   countsChanged() {
@@ -29,11 +41,8 @@ export default Ember.Controller.extend({
     });
   },
 
-  tabs: [
-    Tab.create({ name: 'posts', active: true, 'location': 'group.index' }),
-    Tab.create({ name: 'topics' }),
-    Tab.create({ name: 'mentions' }),
-    Tab.create({ name: 'members' }),
-    Tab.create({ name: 'messages' }),
-  ]
+  @computed('model.is_member')
+  getTabs(isMember) {
+    return this.get('tabs').filter(t => isMember || !t.get('requiresMembership'));
+  }
 });

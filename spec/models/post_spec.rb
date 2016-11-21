@@ -137,17 +137,28 @@ describe Post do
   end
 
   describe 'flagging helpers' do
-    it 'isFlagged is accurate' do
-      post = Fabricate(:post)
-      user = Fabricate(:coding_horror)
-      PostAction.act(user, post, PostActionType.types[:off_topic])
+    let(:post) { Fabricate(:post) }
+    let(:user) { Fabricate(:coding_horror) }
+    let(:admin) { Fabricate(:admin) }
 
+    it 'isFlagged is accurate' do
+      PostAction.act(user, post, PostActionType.types[:off_topic])
       post.reload
       expect(post.is_flagged?).to eq(true)
 
       PostAction.remove_act(user, post, PostActionType.types[:off_topic])
       post.reload
       expect(post.is_flagged?).to eq(false)
+    end
+
+    it 'has_active_flag is accurate' do
+      PostAction.act(user, post, PostActionType.types[:spam])
+      post.reload
+      expect(post.has_active_flag?).to eq(true)
+
+      PostAction.defer_flags!(post, admin)
+      post.reload
+      expect(post.has_active_flag?).to eq(false)
     end
   end
 
@@ -358,6 +369,7 @@ describe Post do
     end
 
     it "finds links from HTML" do
+
       expect(post_two_links.link_count).to eq(2)
     end
 
@@ -424,6 +436,11 @@ describe Post do
       it "handles underscore in username" do
         post = Fabricate.build(:post, post_args.merge(raw: "@Jake @Finn @Jake_Old"))
         expect(post.raw_mentions).to eq(['jake', 'finn', 'jake_old'])
+      end
+
+      it "handles hyphen in groupname" do
+        post = Fabricate.build(:post, post_args.merge(raw: "@org-board"))
+        expect(post.raw_mentions).to eq(['org-board'])
       end
 
     end

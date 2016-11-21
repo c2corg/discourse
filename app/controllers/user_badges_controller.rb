@@ -11,7 +11,7 @@ class UserBadgesController < ApplicationController
     if params[:username]
       user_id = User.where(username_lower: params[:username].downcase).pluck(:id).first
       user_badges = user_badges.where(user_id: user_id) if user_id
-      grant_count = user_badges.count
+      grant_count = badge.user_badges.where(user_id: user_id).count
     end
 
     if offset = params[:offset]
@@ -33,7 +33,7 @@ class UserBadgesController < ApplicationController
 
     if params[:grouped]
       user_badges = user_badges.group(:badge_id)
-                               .select(UserBadge.attribute_names.map {|x| "MAX(#{x}) as #{x}" }, 'COUNT(*) as count')
+                               .select(UserBadge.attribute_names.map {|x| "MAX(#{x}) AS #{x}" }, 'COUNT(*) AS "count"')
     end
 
     user_badges = user_badges.includes(badge: [:badge_grouping, :badge_type])

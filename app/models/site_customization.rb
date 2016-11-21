@@ -4,6 +4,9 @@ require_dependency 'distributed_cache'
 
 class SiteCustomization < ActiveRecord::Base
   ENABLED_KEY = '7e202ef2-56d7-47d5-98d8-a9c8d15e57dd'
+
+  COMPILER_VERSION = 1
+
   @cache = DistributedCache.new('site_customization')
 
   def self.css_fields
@@ -27,20 +30,46 @@ class SiteCustomization < ActiveRecord::Base
     raise e
   end
 
+  def transpile(es6_source, version)
+    template  = Tilt::ES6ModuleTranspilerTemplate.new {}
+    wrapped = <<PLUGIN_API_JS
+Discourse._registerPluginCode('#{version}', api => {
+  #{es6_source}
+});
+PLUGIN_API_JS
+
+    template.babel_transpile(wrapped)
+  end
+
   def process_html(html)
     doc = Nokogiri::HTML.fragment(html)
     doc.css('script[type="text/x-handlebars"]').each do |node|
       name = node["name"] || node["data-template-name"] || "broken"
       precompiled =
         if name =~ /\.raw$/
-          "Discourse.EmberCompatHandlebars.template(#{Barber::EmberCompatPrecompiler.compile(node.inner_html)})"
+          "require('discourse/lib/raw-handlebars').template(#{Barber::Precompiler.compile(node.inner_html)})"
         else
           "Ember.HTMLBars.template(#{Barber::Ember::Precompiler.compile(node.inner_html)})"
         end
-      compiled = <<SCRIPT
-  Ember.TEMPLATES[#{name.inspect}] = #{precompiled};
-SCRIPT
-      node.replace("<script>#{compiled}</script>")
+
+      node.replace <<COMPILED
+        <script>
+          (function() {
+            Ember.TEMPLATES[#{name.inspect}] = #{precompiled};
+          })();
+        </script>
+COMPILED
+    end
+
+    doc.css('script[type="text/discourse-plugin"]').each do |node|
+      if node['version'].present?
+        begin
+          code = transpile(node.inner_html, node['version'])
+          node.replace("<script>#{code}</script>")
+        rescue MiniRacer::RuntimeError => ex
+          node.replace("<script type='text/discourse-js-error'>#{ex.message}</script>")
+        end
+      end
     end
 
     doc.to_s
@@ -105,7 +134,7 @@ SCRIPT
   end
 
   def self.enabled_stylesheet_contents(target=:desktop)
-    @cache["enabled_stylesheet_#{target}"] ||= where(enabled: true)
+    @cache["enabled_stylesheet_#{target}:#{COMPILER_VERSION}"] ||= where(enabled: true)
       .order(:name)
       .pluck(baked_for_target(target))
       .compact
@@ -141,7 +170,7 @@ SCRIPT
   def self.lookup_field(key, target, field)
     return if key.blank?
 
-    cache_key = key + target.to_s + field.to_s;
+    cache_key = "#{key}:#{target}:#{field}:#{COMPILER_VERSION}"
 
     lookup = @cache[cache_key]
     return lookup.html_safe if lookup
@@ -177,7 +206,19 @@ SCRIPT
   end
 
   def ensure_baked!(field)
-    unless self.send("#{field}_baked")
+
+    # If the version number changes, clear out all the baked fields
+    if compiler_version != COMPILER_VERSION
+      updates = { compiler_version: COMPILER_VERSION }
+      SiteCustomization.html_fields.each do |f|
+        updates["#{f}_baked".to_sym] = nil
+      end
+
+      update_columns(updates)
+    end
+
+    baked = send("#{field}_baked")
+    if baked.blank?
       if val = self.send(field)
         val = process_html(val) rescue ""
         self.update_columns("#{field}_baked" => val)
@@ -217,32 +258,33 @@ end
 # Table name: site_customizations
 #
 #  id                      :integer          not null, primary key
-#  name                    :string(255)      not null
+#  name                    :string           not null
 #  stylesheet              :text
 #  header                  :text
-#  header_baked            :text
 #  user_id                 :integer          not null
 #  enabled                 :boolean          not null
-#  key                     :string(255)      not null
+#  key                     :string           not null
 #  created_at              :datetime         not null
 #  updated_at              :datetime         not null
 #  stylesheet_baked        :text             default(""), not null
 #  mobile_stylesheet       :text
+#  mobile_header           :text
 #  mobile_stylesheet_baked :text
 #  footer                  :text
-#  footer_baked            :text
-#  mobile_header           :text
 #  mobile_footer           :text
-#  mobile_header_baked     :text
-#  mobile_footer_baked     :text
 #  head_tag                :text
 #  body_tag                :text
-#  head_tag_baked          :text
-#  body_tag_baked          :text
 #  top                     :text
 #  mobile_top              :text
 #  embedded_css            :text
 #  embedded_css_baked      :text
+#  head_tag_baked          :text
+#  body_tag_baked          :text
+#  header_baked            :text
+#  mobile_header_baked     :text
+#  footer_baked            :text
+#  mobile_footer_baked     :text
+#  compiler_version        :integer          default(0), not null
 #
 # Indexes
 #

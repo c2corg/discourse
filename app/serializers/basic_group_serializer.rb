@@ -12,7 +12,9 @@ class BasicGroupSerializer < ApplicationSerializer
              :grant_trust_level,
              :incoming_email,
              :notification_level,
-             :has_messages
+             :has_messages,
+             :is_member,
+             :mentionable
 
   def include_incoming_email?
     scope.is_staff?
@@ -24,6 +26,18 @@ class BasicGroupSerializer < ApplicationSerializer
   end
 
   def include_notification_level?
+    scope.authenticated?
+  end
+
+  def mentionable
+    object.mentionable?(scope.user, object.id)
+  end
+
+  def is_member
+    scope.is_admin? || GroupUser.where(group_id: object.id, user_id: scope.user.id).present?
+  end
+
+  def include_is_member?
     scope.authenticated?
   end
 

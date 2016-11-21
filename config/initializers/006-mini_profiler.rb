@@ -4,7 +4,7 @@ if Rails.configuration.respond_to?(:load_mini_profiler) && Rails.configuration.l
   require 'flamegraph'
 
   begin
-    require 'memory_profiler' if RUBY_VERSION >= "2.1.0"
+    require 'memory_profiler'
   rescue => e
      STDERR.put "#{e} failed to require mini profiler"
   end
@@ -42,11 +42,12 @@ if defined?(Rack::MiniProfiler)
     /^\/favicon\/proxied/
   ]
 
-  # For our app, let's just show mini profiler always, polling is chatty so nuke that
+  # we DO NOT WANT mini-profiler loading on anything but real desktops and laptops
+  # so let's rule out all handheld, tablet, and mobile devices
   Rack::MiniProfiler.config.pre_authorize_cb = lambda do |env|
     path = env['PATH_INFO']
 
-    (env['HTTP_USER_AGENT'] !~ /iPad|iPhone|Nexus 7|Android/) &&
+    (env['HTTP_USER_AGENT'] !~ /iPad|iPhone|Android/) &&
     !skip.any?{|re| re =~ path}
   end
 

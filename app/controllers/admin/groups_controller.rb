@@ -28,28 +28,7 @@ class Admin::GroupsController < Admin::AdminController
     if group.present?
       users = (params[:users] || []).map {|u| u.downcase}
       user_ids = User.where("username_lower in (:users) OR email IN (:users)", users: users).pluck(:id)
-
-      if user_ids.present?
-        Group.exec_sql("INSERT INTO group_users
-                                    (group_id, user_id, created_at, updated_at)
-                       SELECT #{group.id},
-                              u.id,
-                              CURRENT_TIMESTAMP,
-                              CURRENT_TIMESTAMP
-                       FROM users AS u
-                       WHERE u.id IN (#{user_ids.join(', ')})
-                         AND NOT EXISTS(SELECT 1 FROM group_users AS gu
-                                        WHERE gu.user_id = u.id AND
-                                              gu.group_id = #{group.id})")
-
-        if group.primary_group?
-          User.where(id: user_ids).update_all(primary_group_id: group.id)
-        end
-
-        if group.title.present?
-          User.where(id: user_ids).update_all(title: group.title)
-        end
-      end
+      group.bulk_add(user_ids) if user_ids.present?
     end
 
     render json: success_json
@@ -87,6 +66,7 @@ class Admin::GroupsController < Admin::AdminController
     group.title = group.automatic ? nil : title
 
     if group.save
+      Group.reset_counters(group.id, :group_users)
       render_serialized(group, BasicGroupSerializer)
     else
       render_json_error group
@@ -122,6 +102,8 @@ class Admin::GroupsController < Admin::AdminController
       group.group_users.where(user_id: user.id).update_all(owner: true)
     end
 
+    Group.reset_counters(group.id, :group_users)
+
     render json: success_json
   end
 
@@ -131,6 +113,8 @@ class Admin::GroupsController < Admin::AdminController
 
     user = User.find(params[:user_id].to_i)
     group.group_users.where(user_id: user.id).update_all(owner: false)
+
+    Group.reset_counters(group.id, :group_users)
 
     render json: success_json
   end

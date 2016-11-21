@@ -1,3 +1,4 @@
+import { ajax } from 'discourse/lib/ajax';
 import BadgeGrouping from 'discourse/models/badge-grouping';
 import RestModel from 'discourse/models/rest';
 
@@ -8,63 +9,6 @@ const Badge = RestModel.extend({
   url: function() {
     return Discourse.getURL(`/badges/${this.get('id')}/${this.get('slug')}`);
   }.property(),
-
-  /**
-    @private
-
-    The name key to use for fetching i18n translations.
-
-    @property i18nNameKey
-    @type {String}
-  **/
-  i18nNameKey: function() {
-    return this.get('name').toLowerCase().replace(/\s/g, '_');
-  }.property('name'),
-
-  /**
-    The display name of this badge. Attempts to use a translation and falls back to
-    the actual name.
-
-    @property displayName
-    @type {String}
-  **/
-  displayName: function() {
-    const i18nKey = "badges.badge." + this.get('i18nNameKey') + ".name";
-    return I18n.t(i18nKey, {defaultValue: this.get('name')});
-  }.property('name', 'i18nNameKey'),
-
-  /**
-    The i18n translated description for this badge. Returns the null if no
-    translation exists.
-
-    @property translatedDescription
-    @type {String}
-  **/
-  translatedDescription: function() {
-    const i18nKey = "badges.badge." + this.get('i18nNameKey') + ".description";
-    let translation = I18n.t(i18nKey);
-    if (translation.indexOf(i18nKey) !== -1) {
-      translation = null;
-    }
-    return translation;
-  }.property('i18nNameKey'),
-
-  displayDescription: function(){
-    // we support html in description but in most places do not need it
-    return this.get('displayDescriptionHtml').replace(/<[^>]*>/g, "");
-  }.property('displayDescriptionHtml'),
-
-  /**
-    Display-friendly description string. Returns either a translation or the
-    original description string.
-
-    @property displayDescription
-    @type {String}
-  **/
-  displayDescriptionHtml: function() {
-    const translated = this.get('translatedDescription');
-    return (translated === null ? this.get('description') : translated) || "";
-  }.property('description', 'translatedDescription'),
 
   /**
     Update this badge with the response returned by the server on save.
@@ -110,7 +54,7 @@ const Badge = RestModel.extend({
       requestType = "PUT";
     }
 
-    return Discourse.ajax(url, {
+    return ajax(url, {
       type: requestType,
       data: data
     }).then(function(json) {
@@ -129,7 +73,7 @@ const Badge = RestModel.extend({
   **/
   destroy: function() {
     if (this.get('newBadge')) return Ember.RSVP.resolve();
-    return Discourse.ajax("/admin/badges/" + this.get('id'), {
+    return ajax("/admin/badges/" + this.get('id'), {
       type: "DELETE"
     });
   }
@@ -191,7 +135,7 @@ Badge.reopenClass({
     if(opts && opts.onlyListable){
       listable = "?only_listable=true";
     }
-    return Discourse.ajax('/badges.json' + listable).then(function(badgesJson) {
+    return ajax('/badges.json' + listable).then(function(badgesJson) {
       return Badge.createFromJson(badgesJson);
     });
   },
@@ -204,7 +148,7 @@ Badge.reopenClass({
     @returns {Promise} a promise that resolves to a `Badge`
   **/
   findById: function(id) {
-    return Discourse.ajax("/badges/" + id).then(function(badgeJson) {
+    return ajax("/badges/" + id).then(function(badgeJson) {
       return Badge.createFromJson(badgeJson);
     });
   }

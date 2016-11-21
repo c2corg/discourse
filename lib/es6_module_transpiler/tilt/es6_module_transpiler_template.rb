@@ -1,21 +1,8 @@
 require 'execjs'
 require 'babel/transpiler'
+require 'mini_racer'
 
 module Tilt
-
-  class Console
-    def initialize(prefix=nil)
-      @prefix = prefix || ''
-    end
-
-    def log(msg)
-      Rails.logger.info("#{@prefix}#{msg}")
-    end
-
-    def error(msg)
-      Rails.logger.error("#{@prefix}#{msg}")
-    end
-  end
 
   class ES6ModuleTranspilerTemplate < Tilt::Template
     self.default_mime_type = 'application/javascript'
@@ -29,11 +16,25 @@ module Tilt
     end
 
     def self.create_new_context
-      ctx = V8::Context.new(timeout: 5000)
+      # timeout any eval that takes longer than 15 seconds
+      ctx = MiniRacer::Context.new(timeout: 15000)
       ctx.eval("var self = this; #{File.read(Babel::Transpiler.script_path)}")
       ctx.eval("module = {}; exports = {};");
       ctx.load("#{Rails.root}/lib/es6_module_transpiler/support/es6-module-transpiler.js")
+      ctx.attach("rails.logger.info", proc{|err| Rails.logger.info(err.to_s)})
+      ctx.attach("rails.logger.error", proc{|err| Rails.logger.error(err.to_s)})
+      ctx.eval <<JS
+      console = {
+        prefix: "",
+        log: function(msg){ rails.logger.info(console.prefix + msg); },
+        error: function(msg){ rails.logger.error(console.prefix + msg); }
+      }
+JS
       ctx
+    end
+
+    def self.reset_context
+      @ctx = nil
     end
 
     def self.v8
@@ -59,19 +60,9 @@ module Tilt
     end
 
     def self.protect
-      rval = nil
       @mutex.synchronize do
-        begin
-          rval = yield
-          # This may seem a bit odd, but we don't want to leak out
-          # objects that require locks on the v8 vm, to get a backtrace
-          # you need a lock, if this happens in the wrong spot you can
-          # deadlock a process
-        rescue V8::Error => e
-          raise JavaScriptError.new(e.message, e.backtrace)
-        end
+        yield
       end
-      rval
     end
 
     def whitelisted?(path)
@@ -94,12 +85,33 @@ module Tilt
       @@whitelisted.include?(path) || path =~ /discourse\/mixins/
     end
 
+    def babel_transpile(source)
+      klass = self.class
+      klass.protect do
+        klass.v8.eval("console.prefix = 'BABEL: babel-eval: ';")
+        @output = klass.v8.eval(babel_source(source))
+      end
+    end
+
+    def module_transpile(source, root_path, logical_path)
+      klass = self.class
+      klass.protect do
+        klass.v8.eval("console.prefix = 'BABEL: babel-eval: ';")
+
+        transpiled = babel_source(source)
+
+        compiler_source = "new module.exports.Compiler(#{transpiled}, '#{module_name(root_path, logical_path)}', #{compiler_options}).#{compiler_method}()"
+
+        @output = klass.v8.eval(compiler_source)
+      end
+    end
+
     def evaluate(scope, locals, &block)
       return @output if @output
 
       klass = self.class
       klass.protect do
-        klass.v8['console'] = Console.new("BABEL: #{scope.logical_path}: ")
+        klass.v8.eval("console.prefix = 'BABEL: #{scope.logical_path}: ';")
         @output = klass.v8.eval(generate_source(scope))
       end
 
@@ -139,11 +151,15 @@ module Tilt
       @output
     end
 
+    def babel_source(source)
+      js_source = ::JSON.generate(source, quirks_mode: true)
+      "babel.transform(#{js_source}, {ast: false, whitelist: ['es6.constants', 'es6.properties.shorthand', 'es6.arrowFunctions', 'es6.blockScoping', 'es6.destructuring', 'es6.spread', 'es6.parameters', 'es6.templateLiterals', 'es6.regex.unicode', 'es7.decorators', 'es6.classes']})['code']"
+    end
+
     private
 
     def generate_source(scope)
-      js_source = ::JSON.generate(data, quirks_mode: true)
-      js_source = "babel.transform(#{js_source}, {ast: false, whitelist: ['es6.constants', 'es6.properties.shorthand', 'es6.arrowFunctions', 'es6.blockScoping', 'es6.destructuring', 'es6.spread', 'es6.parameters', 'es6.templateLiterals', 'es6.regex.unicode', 'es7.decorators']})['code']"
+      js_source = babel_source(data)
       "new module.exports.Compiler(#{js_source}, '#{module_name(scope.root_path, scope.logical_path)}', #{compiler_options}).#{compiler_method}()"
     end
 

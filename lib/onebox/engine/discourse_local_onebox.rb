@@ -3,7 +3,10 @@ module Onebox
     class DiscourseLocalOnebox
       include Engine
 
-      matches_regexp Regexp.new("^#{Discourse.base_url.gsub(".","\\.")}.*$", true)
+      # we need to allow for multisite here
+      def self.is_on_site?(url)
+        Regexp.new("^#{Discourse.base_url.gsub(".","\\.")}.*$", true) === url.to_s
+      end
 
       # Use this onebox before others
       def self.priority
@@ -14,13 +17,13 @@ module Onebox
         if other.kind_of?(URI)
           uri = other
           begin
-            route = Rails.application.routes.recognize_path(uri.path)
+            route = Rails.application.routes.recognize_path(uri.path.sub(Discourse.base_uri, ""))
             case route[:controller]
             when 'uploads'
-              super
+              is_on_site?(other)
             when 'topics'
               # super will use matches_regexp to match the domain name
-              super
+              is_on_site?(other)
             else
               false
             end
@@ -28,13 +31,13 @@ module Onebox
             false
           end
         else
-          super
+          is_on_site?(other)
         end
       end
 
       def to_html
         uri = URI::parse(@url)
-        route = Rails.application.routes.recognize_path(uri.path)
+        route = Rails.application.routes.recognize_path(uri.path.sub(Discourse.base_uri, ""))
         url = @url.sub(/[&?]source_topic_id=(\d+)/, "")
         source_topic_id = $1.to_i
 
@@ -42,7 +45,7 @@ module Onebox
         case route[:controller]
         when 'uploads'
 
-          url.gsub!("http:", "https:") if SiteSetting.use_https
+          url.gsub!("http:", "https:") if SiteSetting.force_https
           if File.extname(uri.path) =~ /^.(mov|mp4|webm|ogv)$/
             return "<video width='100%' height='100%' controls><source src='#{url}'><a href='#{url}'>#{url}</a></video>"
           elsif File.extname(uri.path) =~ /^.(mp3|ogg|wav)$/
@@ -63,7 +66,7 @@ module Onebox
             topic = post.topic
             slug = Slug.for(topic.title)
 
-            excerpt = post.excerpt(SiteSetting.post_onebox_maxlength, { keep_emoji_codes: true })
+            excerpt = post.excerpt(SiteSetting.post_onebox_maxlength)
             excerpt.gsub!("\n"," ")
             # hack to make it render for now
             excerpt.gsub!("[/quote]", "[quote]")
@@ -93,7 +96,7 @@ module Onebox
 
             quote = post.excerpt(SiteSetting.post_onebox_maxlength)
             args = { original_url: url,
-                     title: topic.title,
+                     title: PrettyText.unescape_emoji(CGI::escapeHTML(topic.title)),
                      avatar: PrettyText.avatar_img(topic.user.avatar_template, 'tiny'),
                      posts_count: topic.posts_count,
                      last_post: FreedomPatches::Rails4.time_ago_in_words(topic.last_posted_at, false, scope: :'datetime.distance_in_words_verbose'),

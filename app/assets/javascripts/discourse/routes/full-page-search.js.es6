@@ -1,4 +1,7 @@
+import { ajax } from 'discourse/lib/ajax';
 import { translateResults, getSearchKey, isValidSearchTerm } from "discourse/lib/search";
+import Composer from 'discourse/models/composer';
+import PreloadStore from 'preload-store';
 
 export default Discourse.Route.extend({
   queryParams: { q: {}, context_id: {}, context: {}, skip_context: {} },
@@ -24,7 +27,7 @@ export default Discourse.Route.extend({
 
     return PreloadStore.getAndRemove("search", function() {
       if (isValidSearchTerm(params.q)) {
-        return Discourse.ajax("/search", { data: args });
+        return ajax("/search", { data: args });
       } else {
         return null;
       }
@@ -39,6 +42,17 @@ export default Discourse.Route.extend({
     didTransition() {
       this.controllerFor("full-page-search")._showFooter();
       return true;
+    },
+
+    createTopic(searchTerm) {
+      let category;
+      if (searchTerm.indexOf("category:")) {
+        const match =  searchTerm.match(/category:(\S*)/);
+        if (match && match[1]) {
+          category = match[1];
+        }
+      }
+      this.container.lookup('controller:composer').open({action: Composer.CREATE_TOPIC, draftKey: Composer.CREATE_TOPIC, topicCategory: category});
     }
   }
 

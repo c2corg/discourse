@@ -1,5 +1,6 @@
+import { ajax } from 'discourse/lib/ajax';
 function exportEntityByType(type, entity, args) {
-  return Discourse.ajax("/export_csv/export_entity.json", {
+  return ajax("/export_csv/export_entity.json", {
     method: 'POST',
     data: {entity_type: type, entity, args}
   });
@@ -12,7 +13,6 @@ export function exportUserArchive() {
     bootbox.alert(I18n.t("admin.export_csv.rate_limit_error"));
   });
 }
-
 
 export function exportEntity(entity, args) {
   return exportEntityByType('admin', entity, args);

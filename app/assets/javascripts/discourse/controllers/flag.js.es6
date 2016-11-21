@@ -7,6 +7,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
   selected: null,
   flagTopic: null,
   message: null,
+  isWarning: false,
   topicActionByName: null,
 
   onShow() {
@@ -48,7 +49,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
   }.property('post', 'flagTopic', 'model.actions_summary.@each.can_act'),
 
   staffFlagsAvailable: function() {
-    return (this.get('model.flagsAvailable').length > 1);
+    return (this.get('model.flagsAvailable') && this.get('model.flagsAvailable').length > 1);
   }.property('post', 'flagTopic', 'model.actions_summary.@each.can_act'),
 
   submitEnabled: function() {
@@ -89,7 +90,6 @@ export default Ember.Controller.extend(ModalFunctionality, {
     },
 
     createFlag(opts) {
-      const self = this;
       let postAction; // an instance of ActionSummary
 
       if (!this.get('flagTopic')) {
@@ -98,24 +98,30 @@ export default Ember.Controller.extend(ModalFunctionality, {
         postAction = this.get('topicActionByName.' + this.get('selected.name_key'));
       }
 
-      let params = this.get('selected.is_custom_flag') ? {message: this.get('message')} : {};
+      let params = this.get('selected.is_custom_flag') ? {message: this.get('message') } : {};
       if (opts) { params = $.extend(params, opts); }
 
       this.send('hideModal');
 
-      postAction.act(this.get('model'), params).then(function() {
-        self.send('closeModal');
+      postAction.act(this.get('model'), params).then(() => {
+        this.send('closeModal');
         if (params.message) {
-          self.set('message', '');
+          this.set('message', '');
         }
-      }, function(errors) {
-        self.send('closeModal');
+        this.appEvents.trigger('post-stream:refresh', { id: this.get('model.id') });
+      }).catch(errors => {
+        this.send('closeModal');
         if (errors && errors.responseText) {
           bootbox.alert($.parseJSON(errors.responseText).errors);
         } else {
           bootbox.alert(I18n.t('generic_error'));
         }
       });
+    },
+
+    createFlagAsWarning() {
+      this.send('createFlag', {isWarning: true});
+      this.set('model.hidden', true);
     },
 
     changePostActionType(action) {
@@ -133,6 +139,12 @@ export default Ember.Controller.extend(ModalFunctionality, {
     }
   }.property('selected.name_key', 'userDetails.can_be_deleted', 'userDetails.can_delete_all_posts'),
 
+  canSendWarning: function() {
+    if (this.get("flagTopic")) return false;
+
+    return (Discourse.User.currentProp('staff') && this.get('selected.name_key') === 'notify_user');
+  }.property('selected.name_key'),
+
   usernameChanged: function() {
     this.set('userDetails', null);
     this.fetchUserDetails();
@@ -141,8 +153,7 @@ export default Ember.Controller.extend(ModalFunctionality, {
   fetchUserDetails() {
     if (Discourse.User.currentProp('staff') && this.get('model.username')) {
       const AdminUser = require('admin/models/admin-user').default;
-      AdminUser.find(this.get('model.username').toLowerCase())
-                         .then(user => this.set('userDetails', user));
+      AdminUser.find(this.get('model.user_id')).then(user => this.set('userDetails', user));
     }
   }
 

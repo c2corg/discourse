@@ -71,7 +71,7 @@ class NewPostManager
 
     return false if user.staff? || user.staged
 
-    (user.post_count < SiteSetting.approve_post_count) ||
+    (user.trust_level <= TrustLevel.levels[:basic] && user.post_count < SiteSetting.approve_post_count) ||
     (user.trust_level < SiteSetting.approve_unless_trust_level.to_i) ||
     is_fast_typer?(manager) ||
     matches_auto_block_regex?(manager)
@@ -82,14 +82,11 @@ class NewPostManager
 
       result = manager.enqueue('default')
 
-      block = is_fast_typer?(manager)
-
-      block ||= matches_auto_block_regex?(manager)
-
-      manager.user.update_columns(blocked: true) if block
+      if is_fast_typer?(manager) || matches_auto_block_regex?(manager)
+        UserBlocker.block(manager.user, Discourse.system_user, keep_posts: true)
+      end
 
       result
-
     end
   end
 

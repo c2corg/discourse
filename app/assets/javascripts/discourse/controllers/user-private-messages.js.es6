@@ -2,25 +2,20 @@ import computed from 'ember-addons/ember-computed-decorators';
 import Topic from 'discourse/models/topic';
 
 export default Ember.Controller.extend({
-
-  needs: ["user-topics-list", "user"],
+  needs: ["application", "user-topics-list", "user"],
   pmView: false,
-  viewingSelf: Em.computed.alias("controllers.user.viewingSelf"),
+  viewingSelf: Em.computed.alias('controllers.user.viewingSelf'),
   isGroup: Em.computed.equal('pmView', 'groups'),
-
+  currentPath: Em.computed.alias('controllers.application.currentPath'),
   selected: Em.computed.alias('controllers.user-topics-list.selected'),
   bulkSelectEnabled: Em.computed.alias('controllers.user-topics-list.bulkSelectEnabled'),
-
-  mobileView: function() {
-    return Discourse.Mobile.mobileView;
-  }.property(),
 
   showNewPM: function(){
     return this.get('controllers.user.viewingSelf') &&
            Discourse.User.currentProp('can_send_private_messages');
   }.property('controllers.user.viewingSelf'),
 
-  @computed('selected.@each', 'bulkSelectEnabled')
+  @computed('selected.[]', 'bulkSelectEnabled')
   hasSelection(selected, bulkSelectEnabled){
     return bulkSelectEnabled && selected && selected.length > 0;
   },

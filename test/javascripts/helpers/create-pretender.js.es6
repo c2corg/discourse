@@ -42,7 +42,7 @@ export default function() {
 
     this.get('/admin/plugins', () => response({ plugins: [] }));
 
-    this.get('/composer-messages', () => response([]));
+    this.get('/composer_messages', () => response({ composer_messages: [] }));
 
     this.get("/latest.json", () => {
       const json = fixturesByUrl['/latest.json'];
@@ -64,17 +64,32 @@ export default function() {
       return response(json);
     });
 
+    this.get('/users/eviltrout/summary.json', () => {
+      return response({
+        user_summary: {
+          topics: [],
+          topic_ids: [],
+          replies: [],
+          links: []
+        },
+        topics: [],
+      });
+    });
+
+    this.get('/clicks/track', success);
+
     this.put('/users/eviltrout', () => response({ user: {} }));
 
     this.get("/t/280.json", () => response(fixturesByUrl['/t/280/1.json']));
-
     this.get("/t/28830.json", () => response(fixturesByUrl['/t/28830/1.json']));
-
     this.get("/t/9.json", () => response(fixturesByUrl['/t/9/1.json']));
 
     this.get("/t/id_for/:slug", () => {
       return response({id: 280, slug: "internationalization-localization", url: "/t/internationalization-localization/280"});
     });
+
+    this.delete('/t/:id', success);
+    this.put('/t/:id/recover', success);
 
     this.get("/404-body", () => {
       return [200, {"Content-Type": "text/html"}, "<div class='page-not-found'>not found</div>"];
@@ -85,8 +100,34 @@ export default function() {
 
     this.get('/users/:username/staff-info.json', () => response({}));
 
-    this.put('/categories/:category_id', function(request) {
+    this.get('/post_action_users', () => {
+      return response({
+        post_action_users: [
+           {id: 1, username: 'eviltrout', avatar_template: '/user_avatar/default/eviltrout/{size}/1.png', username_lower: 'eviltrout' }
+         ]
+      });
+    });
+
+    this.get('/post_replies', () => {
+      return response({ post_replies: [{ id: 1234, cooked: 'wat' }] });
+    });
+
+    this.get('/post_reply_histories', () => {
+      return response({ post_reply_histories: [{ id: 1234, cooked: 'wat' }] });
+    });
+
+    this.get('/category_hashtags/check', () => {
+      return response({ valid: [{ slug: "bug", url: '/c/bugs' }] });
+    });
+
+    this.put('/categories/:category_id', request => {
+
       const category = parsePostData(request.requestBody);
+
+      if (category.email_in === "duplicate@example.com") {
+        return response(422, {"errors": ['duplicate email']});
+      }
+
       return response({category});
     });
 
@@ -108,8 +149,18 @@ export default function() {
       if (data.password === 'correct') {
         return response({username: 'eviltrout'});
       }
+
+      if (data.password === 'not-activated') {
+        return response({ error: "not active",
+                          reason: "not_activated",
+                          sent_to_email: '<small>eviltrout@example.com</small>',
+                          current_email: '<small>current@example.com</small>' });
+      }
+
       return response(400, {error: 'invalid login'});
     });
+
+    this.post('/users/action/send_activation_email', success);
 
     this.get('/users/hp.json', function() {
       return response({"value":"32faff1b1ef1ac3","challenge":"61a3de0ccf086fb9604b76e884d75801"});
@@ -132,6 +183,7 @@ export default function() {
 
     this.delete('/posts/:post_id', success);
     this.put('/posts/:post_id/recover', success);
+    this.get('/posts/:post_id/expand-embed', success);
 
     this.put('/posts/:post_id', request => {
       const data = parsePostData(request.requestBody);
@@ -153,6 +205,18 @@ export default function() {
                                            slug: request.params.slug } });
     });
 
+    this.get("/groups/discourse/topics.json", () => {
+      return response(200, fixturesByUrl['/groups/discourse/posts.json']);
+    });
+
+    this.get("/groups/discourse/mentions.json", () => {
+      return response(200, fixturesByUrl['/groups/discourse/posts.json']);
+    });
+
+    this.get("/groups/discourse/messages.json", () => {
+      return response(200, fixturesByUrl['/groups/discourse/posts.json']);
+    });
+
     this.get('/t/:topic_id/posts.json', request => {
       const postIds = request.queryParams.post_ids;
       const posts = postIds.map(p => ({id: parseInt(p), post_number: parseInt(p) }));
@@ -162,6 +226,9 @@ export default function() {
     this.get('/posts/:post_id/reply-history.json', () => {
       return response(200, [ { id: 2222, post_number: 2222 } ]);
     });
+
+    this.post('/user_badges', () => response(200, fixturesByUrl['/user_badges']));
+    this.delete('/user_badges/:badge_id', success);
 
     this.post('/posts', function(request) {
       const data = parsePostData(request.requestBody);
@@ -185,6 +252,13 @@ export default function() {
 
     const siteText = {id: 'site.test', value: 'Test McTest'};
     const overridden = {id: 'site.overridden', value: 'Overridden', overridden: true };
+
+    this.get('/admin/users/list/active.json', () => {
+      return response(200, [
+        {id: 1, username: 'eviltrout', email: '<small>eviltrout@example.com</small>'}
+      ]);
+    });
+
     this.get('/admin/customize/site_texts', request => {
 
       if (request.queryParams.overridden) {
@@ -203,6 +277,12 @@ export default function() {
       result.can_revert = true;
       return response(200, {site_text: result});
     });
+
+    this.get('/tag_groups', () => response(200, {tag_groups: []}));
+    this.post('/admin/users/:user_id/generate_api_key', success);
+    this.delete('/admin/users/:user_id/revoke_api_key', success);
+    this.post('/admin/badges', success);
+    this.delete('/admin/badges/:id', success);
   });
 
   server.prepareBody = function(body){
