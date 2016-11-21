@@ -110,6 +110,10 @@ class ImportScripts::Base
     @lookup.post_id_from_imported_post_id(import_id)
   end
 
+  def post_content_from_discourse_post_id(post_id)
+    @lookup.post_content_from_discourse_post_id(post_id)
+  end
+
   def topic_lookup_from_imported_post_id(import_id)
     @lookup.topic_lookup_from_imported_post_id(import_id)
   end
@@ -398,6 +402,8 @@ class ImportScripts::Base
       name: opts[:name],
       user_id: opts[:user_id] || opts[:user].try(:id) || Discourse::SYSTEM_USER_ID,
       position: opts[:position],
+      read_restricted: opts[:read_restricted],
+      suppress_from_homepage: opts[:suppress_from_homepage],
       description: opts[:description],
       parent_category_id: opts[:parent_category_id],
       color: opts[:color] || "AB9364",
@@ -774,8 +780,7 @@ class ImportScripts::Base
     @start_times.fetch(key) {|k| @start_times[k] = Time.now}
   end
 
-  def batches(batch_size)
-    offset = 0
+  def batches(batch_size, offset=0)
     loop do
       yield offset
       offset += batch_size
