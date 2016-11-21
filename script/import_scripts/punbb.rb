@@ -680,6 +680,8 @@ class ImportScripts::PunBB < ImportScripts::Base
   def process_punbb_post(raw, import_id)
     s = raw.dup
 
+    s.gsub!(/www\.camptocamp\.org\/forums/, 'forum.camptocamp.org')
+
     # error with [url]aide[/url] or [url]association.circuitderando.com[/url]
     s.gsub!(/\[url\](a.*)\[\/url\]/, '[url]http://\1[/url]')
 
