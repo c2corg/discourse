@@ -680,6 +680,12 @@ class ImportScripts::PunBB < ImportScripts::Base
   def process_punbb_post(raw, import_id)
     s = raw.dup
 
+    # rewrite internal links
+    s.gsub!(/#t(\d+)/, '[url]/viewtopic.php?id=\1[/url]')
+    s.gsub!(/#p(\d+)/, '[url]/viewtopic.php?pid=\1[/url]')
+    s.gsub!(/\[url=#t(\d+)\](.*)\[\/url\]/, '[url=/viewtopic.php?id=\1]\2[/url]')
+    s.gsub!(/\[url=#p(\d+)\](.*)\[\/url\]/, '[url=/viewtopic.php?pid=\1]\2[/url]')
+
     s.gsub!(/www\.camptocamp\.org\/forums/, 'forum.camptocamp.org')
 
     # error with [url]aide[/url] or [url]association.circuitderando.com[/url]
