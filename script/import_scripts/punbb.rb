@@ -681,8 +681,10 @@ class ImportScripts::PunBB < ImportScripts::Base
     s = raw.dup
 
     # rewrite internal links
-    s.gsub!(/#t(\d+)/, '[url]/viewtopic.php?id=\1[/url]')
-    s.gsub!(/#p(\d+)/, '[url]/viewtopic.php?pid=\1[/url]')
+    s.gsub!(/[^\d]#t(\d+)/, '[url=/viewtopic.php?id=\1]#t\1[/url]')
+    s.gsub!(/^#t(\d+)/, '[url=/viewtopic.php?id=\1]#t\1[/url]')
+    s.gsub!(/[^\d]#p(\d+)/, '[url=/viewtopic.php?pid=\1]#p\1[/url]')
+    s.gsub!(/^#p(\d+)/, '[url=/viewtopic.php?pid=\1]#p\1[/url]')
     s.gsub!(/\[url=#t(\d+)\](.*)\[\/url\]/, '[url=/viewtopic.php?id=\1]\2[/url]')
     s.gsub!(/\[url=#p(\d+)\](.*)\[\/url\]/, '[url=/viewtopic.php?pid=\1]\2[/url]')
 
