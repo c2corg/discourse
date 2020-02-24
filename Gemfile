@@ -8,7 +8,7 @@ end
 
 if rails_master?
   gem 'arel', git: 'https://github.com/rails/arel.git'
-  gem 'rails', git: 'https://github.com/rails/rails.git'
+  gem 'rails', '4.2.7'
   gem 'rails-observers', git: 'https://github.com/rails/rails-observers.git'
   gem 'seed-fu', git: 'https://github.com/SamSaffron/seed-fu.git', branch: 'discourse'
 else
@@ -59,7 +59,7 @@ gem 'rails_multisite'
 
 gem 'fast_xs'
 
-gem 'fast_xor'
+gem 'fast_xor', '>= 1.1.3'
 
 # while we sort out https://github.com/sdsykes/fastimage/pull/46
 gem 'discourse_fastimage', '2.0.3', require: 'fastimage'
@@ -93,14 +93,14 @@ gem 'oj'
 gem 'pg'
 gem 'pry-rails', require: false
 gem 'r2', '~> 0.2.5', require: false
-gem 'rake'
+gem 'rake', '>= 12.3.3'
 
 
 gem 'rest-client'
 gem 'rinku'
 gem 'sanitize'
 gem 'sass'
-gem 'sass-rails'
+gem 'sass-rails', '>= 5.0.4'
 gem 'sidekiq'
 gem 'sidekiq-statistic'
 
@@ -132,17 +132,17 @@ group :test, :development do
   gem 'certified', require: false
   # later appears to break Fabricate(:topic, category: category)
   gem 'fabrication', '2.9.8', require: false
-  gem 'discourse-qunit-rails', require: 'qunit-rails'
+  gem 'discourse-qunit-rails', '0.0.9'
   gem 'mocha', require: false
   gem 'rb-fsevent', require: RUBY_PLATFORM =~ /darwin/i ? 'rb-fsevent' : false
   gem 'rb-inotify', '~> 0.9', require: RUBY_PLATFORM =~ /linux/i ? 'rb-inotify' : false
-  gem 'rspec-rails', require: false
+  gem 'rspec-rails', '>= 3.4.2', require: false
   gem 'shoulda', require: false
   gem 'simplecov', require: false
   gem 'timecop'
   gem 'rspec-given'
   gem 'rspec-html-matchers'
-  gem 'spork-rails'
+  gem 'spork-rails', '>= 4.0.0'
   gem 'pry-nav'
   gem 'byebug', require: ENV['RM_INFO'].nil?
 end
@@ -152,7 +152,7 @@ group :development do
   gem 'better_errors'
   gem 'binding_of_caller'
   gem 'librarian', '>= 0.0.25', require: false
-  gem 'annotate'
+  gem 'annotate', '>= 2.7.2'
   gem 'foreman', require: false
 end
 
