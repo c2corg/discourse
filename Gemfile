@@ -8,7 +8,7 @@ end
 
 if rails_master?
   gem 'arel', git: 'https://github.com/rails/arel.git'
-  gem 'rails', git: 'https://github.com/rails/rails.git'
+  gem 'rails', '>= 5.0.0', git: 'https://github.com/rails/rails.git'
   gem 'rails-observers', git: 'https://github.com/rails/rails-observers.git'
   gem 'seed-fu', git: 'https://github.com/SamSaffron/seed-fu.git', branch: 'discourse'
 else
@@ -28,7 +28,7 @@ else
   # gem 'activejob'
   # gem 'railties'
   # gem 'sprockets-rails'
-  gem 'rails', '~> 4.2'
+  gem 'rails', '~> 5.0', '>= 5.0.0'
 
   gem 'rails-observers'
   gem 'seed-fu', '~> 2.3.5'
@@ -53,7 +53,7 @@ gem 'ember-source', '1.12.2'
 gem 'barber'
 gem 'babel-transpiler'
 
-gem 'message_bus'
+gem 'message_bus', '>= 2.0.1'
 
 gem 'rails_multisite'
 
@@ -76,19 +76,19 @@ gem 'image_optim', '0.20.2'
 gem 'multi_json'
 gem 'mustache'
 gem 'nokogiri'
-gem 'omniauth'
-gem 'omniauth-openid'
+gem 'omniauth', '>= 1.3.1'
+gem 'omniauth-openid', '>= 1.0.1'
 gem 'openid-redis-store'
-gem 'omniauth-facebook'
-gem 'omniauth-twitter'
-gem 'omniauth-instagram'
+gem 'omniauth-facebook', '>= 3.0.0'
+gem 'omniauth-twitter', '>= 1.2.1'
+gem 'omniauth-instagram', '>= 1.0.2'
 
 # forked while https://github.com/intridea/omniauth-github/pull/41 is being upstreamd
-gem 'omniauth-github-discourse', require: 'omniauth-github'
+gem 'omniauth-github-discourse', '>= 1.1.2', require: 'omniauth-github'
 
-gem 'omniauth-oauth2', require: false
+gem 'omniauth-oauth2', '>= 1.3.1', require: false
 
-gem 'omniauth-google-oauth2'
+gem 'omniauth-google-oauth2', '>= 0.3.1'
 gem 'oj'
 gem 'pg'
 gem 'pry-rails', require: false
@@ -100,17 +100,17 @@ gem 'rest-client'
 gem 'rinku'
 gem 'sanitize'
 gem 'sass'
-gem 'sass-rails'
+gem 'sass-rails', '>= 5.0.5'
 gem 'sidekiq'
 gem 'sidekiq-statistic'
 
 # for sidekiq web
-gem 'sinatra', require: false
+gem 'sinatra', '>= 2.0.0', require: false
 gem 'execjs', require: false
 gem 'mini_racer'
-gem 'thin', require: false
+gem 'thin', '>= 1.7.0', require: false
 gem 'highline', require: false
-gem 'rack-protection' # security
+gem 'rack-protection' , '>= 1.5.3' # security
 
 # Gems used only for assets and not required
 # in production environments by default.
@@ -132,24 +132,24 @@ group :test, :development do
   gem 'certified', require: false
   # later appears to break Fabricate(:topic, category: category)
   gem 'fabrication', '2.9.8', require: false
-  gem 'discourse-qunit-rails', require: 'qunit-rails'
+  gem 'discourse-qunit-rails', '>= 0.0.9', require: 'qunit-rails'
   gem 'mocha', require: false
   gem 'rb-fsevent', require: RUBY_PLATFORM =~ /darwin/i ? 'rb-fsevent' : false
   gem 'rb-inotify', '~> 0.9', require: RUBY_PLATFORM =~ /linux/i ? 'rb-inotify' : false
-  gem 'rspec-rails', require: false
+  gem 'rspec-rails', '>= 3.5.0', require: false
   gem 'shoulda', require: false
   gem 'simplecov', require: false
   gem 'timecop'
   gem 'rspec-given'
   gem 'rspec-html-matchers'
-  gem 'spork-rails'
+  gem 'spork-rails', '>= 4.0.0'
   gem 'pry-nav'
   gem 'byebug', require: ENV['RM_INFO'].nil?
 end
 
 group :development do
   gem 'bullet', require: !!ENV['BULLET']
-  gem 'better_errors'
+  gem 'better_errors', '>= 2.1.1'
   gem 'binding_of_caller'
   gem 'librarian', '>= 0.0.25', require: false
   gem 'annotate'
@@ -172,7 +172,7 @@ gem 'htmlentities', require: false
 
 gem 'fast_stack', require: false, platform: [:mri_20]
 gem 'flamegraph', require: false
-gem 'rack-mini-profiler', require: false
+gem 'rack-mini-profiler', '>= 0.10.1', require: false
 
 gem 'unicorn', require: false
 gem 'puma', require: false
