@@ -175,7 +175,7 @@ gem 'flamegraph', require: false
 gem 'rack-mini-profiler', require: false
 
 gem 'unicorn', require: false
-gem 'puma', require: false
+gem 'puma', '>= 3.12.6', require: false
 gem 'rbtrace', require: false, platform: :mri
 
 # required for feed importing and embedding
